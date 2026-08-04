@@ -17,8 +17,8 @@ below the fold.
 
 ## Contents
 
-- [The turn loop](#the-turn-loop)
 - [Quick start](#quick-start)
+- [Typical workflow: the turn loop](#typical-workflow-the-turn-loop)
 - [Roles: skills and agents](#roles-skills-and-agents)
 - [The pre-push gate](#the-pre-push-gate)
 - [Severity model](#severity-model)
@@ -32,9 +32,58 @@ below the fold.
 - [References](#references)
 - [Differences from zat.env](#differences-from-zatenv)
 
-## The turn loop
+## Quick start
 
-A **turn** is one pass through the plan-spec-implement-evaluate loop.
+Prerequisites: git, jq, and GitHub Copilot CLI
+([install docs](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli);
+`npm install -g @github/copilot` or `brew install --cask copilot-cli`).
+
+```bash
+git clone https://github.com/peterzat/zatpilot.env.git ~/src/zatpilot.env
+cd ~/src/zatpilot.env
+./zatpilot.env-install.sh
+```
+
+The installer is idempotent. It prompts for git identity only when unset, and:
+
+| Target | Source |
+|--------|--------|
+| `~/.copilot/copilot-instructions.md` | symlink to `copilot/global-copilot-instructions.md` |
+| `~/.copilot/skills/<name>` | symlinks to the six skill directories |
+| `~/.copilot/agents/<name>.agent.md` | symlinks to the five agent files |
+| `~/.copilot/bin/` | symlinks to the three helper scripts, added to PATH |
+| `~/.copilot/hooks/zatpilot-env.json` | generated registration for the pre-push gate |
+| git globals | aliases include, global ignore file, `init.defaultBranch main` |
+
+It never modifies the CLI's own state or settings files. Open a new shell
+(for PATH), start `copilot`, and check that `/skills list` shows the six
+skills and `/agent` lists the five agents. On a first install, walk
+[docs/mac-validation.md](docs/mac-validation.md) once to confirm the
+CLI-dependent behaviors.
+
+Then, in any project:
+
+```
+copilot          # from the project root
+/model           # pick a strong reasoning model; the review loop needs one
+/spec            # start the first turn
+```
+
+## Typical workflow: the turn loop
+
+One full turn, as you actually type it:
+
+```
+/spec                    # re-orient: picks up where the project left off
+Shift+Tab                # plan mode, when the next step needs exploring
+  ...discuss, approve, choose "exit plan mode and I will prompt myself"
+/spec plan               # the approved plan becomes SPEC.md criteria
+implement the spec       # interactive, or Shift+Tab into autopilot
+/spec                    # checks off met criteria; repeat until all are met
+run git push             # the gate denies, /codereview runs, the push lands
+```
+
+A **turn** is one pass through that plan-spec-implement-evaluate loop.
 
 1. **Plan.** For non-trivial work, enter plan mode (Shift+Tab, or `/plan`).
    Plan mode is the exploratory thinking space: read-only (the CLI hard-blocks
@@ -74,36 +123,6 @@ disk, so a fresh session loses nothing and gains a clean context window.
 
 Start every session with `/spec`. It re-orients from current state: picking up
 a proposal, reporting progress, or prompting you to define what to build.
-
-## Quick start
-
-Prerequisites: git, jq, and GitHub Copilot CLI
-([install docs](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli);
-`npm install -g @github/copilot` or `brew install --cask copilot-cli`).
-
-```bash
-git clone https://github.com/peterzat/zatpilot.env.git ~/src/zatpilot.env
-cd ~/src/zatpilot.env
-./zatpilot.env-install.sh
-```
-
-The installer is idempotent. It prompts for git identity only when unset, and:
-
-| Target | Source |
-|--------|--------|
-| `~/.copilot/copilot-instructions.md` | symlink to `copilot/global-copilot-instructions.md` |
-| `~/.copilot/skills/<name>` | symlinks to the six skill directories |
-| `~/.copilot/agents/<name>.agent.md` | symlinks to the five agent files |
-| `~/.copilot/bin/` | symlinks to the three helper scripts, added to PATH |
-| `~/.copilot/hooks/zatpilot-env.json` | generated registration for the pre-push gate |
-| git globals | aliases include, global ignore file, `init.defaultBranch main` |
-
-It never modifies the CLI's own state or settings files. Open a new shell
-(for PATH), start `copilot`, and check `/skills list` and `/agent`. On the
-first machine, walk [docs/mac-validation.md](docs/mac-validation.md) once to
-confirm the CLI-dependent behaviors.
-
-Then, in any project: `/spec` to start the first turn.
 
 ## Roles: skills and agents
 

@@ -316,6 +316,13 @@ bypass_cmds=(
   $'git add -A\ngit push'
   $'git commit -m wip\ngit push origin main'
   $'git add -A\ngit commit -m wip\ngit push'
+  # Transparent prefixes (assignments and env/command/nohup/sudo wrappers)
+  # must not hide the push from the back-walk detector.
+  'env git push'
+  'command git push'
+  'GIT_TRACE=1 git push'
+  'nohup git push'
+  'sudo git push'
 )
 for cmd in "${bypass_cmds[@]}"; do
   setup_test_repo
@@ -370,6 +377,10 @@ tagfp_cmds=(
   'git push origin main v1.0'
   'git push origin v1.0 && git push origin main'
   'git push origin HEAD'
+  # Version-like branch names are not tags; the anchored version pattern
+  # must still gate them.
+  'git push origin v2feature'
+  'git push origin v1.5-hotfix'
 )
 for cmd in "${tagfp_cmds[@]}"; do
   setup_test_repo

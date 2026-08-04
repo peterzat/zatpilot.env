@@ -94,11 +94,15 @@ _normalize_ops() {
 # is_tag_only_push consume it, so the command-position rule and the git-level
 # option handling live in exactly one place and cannot drift apart.
 #
-# A "git" token counts as a command only if it is first or follows a shell
-# operator (so "echo git push" is not misread as a push). _normalize_ops has
-# already promoted those operators to standalone tokens even when the user
-# wrote them tight-packed ("cmd1;git push"), across newlines, or in a subshell
-# "(git push)".
+# A "git" token counts as a command only if it is in command position: first,
+# after a shell operator, or preceded only by transparent prefix tokens
+# (VAR=value assignments, the prefix words env/command/exec/nohup/time/sudo/
+# builtin/xargs, and option tokens starting with "-"). So "echo git push" is
+# not misread as a push, while "env git push", "command git push", and
+# "GIT_TRACE=1 git push" still gate. Bias stays toward over-detection.
+# _normalize_ops has already promoted operators to standalone tokens even when
+# the user wrote them tight-packed ("cmd1;git push"), across newlines, or in a
+# subshell "(git push)".
 _push_subcommand_indices() {
   local -a t
   # shellcheck disable=SC2206
@@ -106,12 +110,21 @@ _push_subcommand_indices() {
   local n=${#t[@]} i=0
   while (( i < n )); do
     if [[ "${t[i]}" != "git" ]]; then i=$((i + 1)); continue; fi
-    if (( i > 0 )); then
-      case "${t[i-1]}" in
-        "&&"|"||"|";"|"|"|"&"|"("|"{"|"!") ;;
-        *) i=$((i + 1)); continue ;;
+    # Command-position check: walk backwards over transparent prefix tokens
+    # until an operator or start of string (command position) or any other
+    # word (not a command; "echo git push").
+    local p=$((i - 1)) cmdpos=1
+    while (( p >= 0 )); do
+      case "${t[p]}" in
+        "&&"|"||"|";"|"|"|"&"|"("|"{"|"!") break ;;
+        env|command|exec|nohup|time|sudo|builtin|xargs) p=$((p - 1)) ;;
+        -*) p=$((p - 1)) ;;
+        *)
+          if [[ "${t[p]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then p=$((p - 1))
+          else cmdpos=0; break; fi ;;
       esac
-    fi
+    done
+    if (( cmdpos == 0 )); then i=$((i + 1)); continue; fi
     # Skip git-level options to reach the subcommand. The listed options take
     # a separate-space argument (consume two tokens); any other -short/--long
     # is a boolean flag or inline --key=value (one token).
@@ -184,11 +197,15 @@ is_tag_only_push() {
     done
     local tag_only_here=0
     if (( ${#positionals[@]} >= 2 )); then
-      # Explicit refspecs present: tag-only iff every refspec looks like a tag.
+      # Explicit refspecs present: tag-only iff every refspec looks like a
+      # tag: a whole-token version (v1, v1.2, v2.0.0) or refs/tags/. The
+      # version pattern is anchored to the entire refspec so a version-like
+      # BRANCH name (v2feature) still gates; over-gating an oddly named tag
+      # only costs a needless review, a skipped branch push is a bypass.
       tag_only_here=1
       local r
       for r in "${positionals[@]:1}"; do
-        if [[ ! "${r}" =~ ^v[0-9] ]] && [[ ! "${r}" =~ ^refs/tags/ ]]; then
+        if [[ ! "${r}" =~ ^v[0-9]+(\.[0-9]+)*$ ]] && [[ ! "${r}" =~ ^refs/tags/ ]]; then
           tag_only_here=0; break
         fi
       done

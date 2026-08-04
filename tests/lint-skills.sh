@@ -272,10 +272,14 @@ echo "==> 8. Writing style (no decorative glyphs)"
 #
 # No em-dashes, no emoji, no checkmark glyphs in authored files. LICENSE
 # is third-party text and exempt; SPEC.md checkboxes are the one allowed
-# checkbox use (checked when a criterion is verified).
+# checkbox use (checked when a criterion is verified). CODEREVIEW.md,
+# SECURITY.md, and TESTING.md are generated review artifacts (rolling
+# working state written by review agents, not authored sources), so they
+# are out of style scope; SPEC.md and BACKLOG.md are hand-authored and
+# stay in.
 
 STYLE_SCOPE=()
-while IFS= read -r f; do STYLE_SCOPE+=("$f"); done < <(find . -maxdepth 4 -type f \( -name '*.md' -o -name '*.sh' -o -path './bin/*' \) -not -path './.git/*' -not -name 'LICENSE' 2>/dev/null | sort)
+while IFS= read -r f; do STYLE_SCOPE+=("$f"); done < <(find . -maxdepth 4 -type f \( -name '*.md' -o -name '*.sh' -o -path './bin/*' \) -not -path './.git/*' -not -name 'LICENSE' -not -name 'CODEREVIEW.md' -not -name 'SECURITY.md' -not -name 'TESTING.md' 2>/dev/null | sort)
 
 for f in "${STYLE_SCOPE[@]}"; do
   base=$(basename "$f")

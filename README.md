@@ -12,8 +12,7 @@ the how.
 
 zatpilot.env is a standalone hard fork of
 [zat.env](https://github.com/peterzat/zat.env), the same system built for a
-different CLI harness. See [Differences from zat.env](#differences-from-zatenv)
-below the fold.
+different CLI harness. See [Differences from zat.env](#differences-from-zatenv).
 
 ## Contents
 
@@ -244,7 +243,7 @@ survives dozens of turns from silently rotting.
 Roles read each other's persistent files to share context:
 
 ```
-spec        reads CODEREVIEW, TESTING, BACKLOG      writes SPEC, (BACKLOG)
+spec        reads CODEREVIEW, TESTING, BACKLOG          writes SPEC, (BACKLOG)
 codereview  reads SPEC, SECURITY, TESTING, CODEREVIEW   writes CODEREVIEW, marker
 security    reads SPEC, CODEREVIEW, SECURITY            writes SECURITY
 codefix     reads CODEREVIEW, SECURITY                  writes source only

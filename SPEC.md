@@ -20,7 +20,7 @@ validation on a machine with the CLI installed.
   test and never touches CLI-owned state files (tests/test-install.sh).
 - [x] tests/run-all.sh passes in full on Linux.
 - [x] README.md stands alone, links the design article, and documents the
-  differences from zat.env below the fold; NOTICE carries the source
+  differences from zat.env; NOTICE carries the source
   attribution.
 - [x] Skills and agents are discovered from symlinks by the live CLI
   (docs/mac-validation.md items 1-2).

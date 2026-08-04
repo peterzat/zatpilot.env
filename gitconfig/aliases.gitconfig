@@ -1,0 +1,11 @@
+[alias]
+    st = status --short --branch
+    lg = log --oneline --graph --decorate -20
+    lga = log --oneline --graph --decorate --all
+    co = checkout
+    br = branch
+    ci = commit
+    unstage = reset HEAD --
+    last = log -1 HEAD --stat
+    amend = commit --amend --no-edit
+    aliases = config --get-regexp alias

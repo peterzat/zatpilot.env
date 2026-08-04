@@ -1,0 +1,25 @@
+# Secrets / credentials
+.env
+*.pem
+*.key
+*.secret
+
+# Local working notes
+TODO.md
+
+# Editor / OS junk
+.DS_Store
+*~
+*.swp
+.idea/
+.vscode/
+
+# Agent-harness local state (machine-specific, not tracked)
+.claude/
+.github/copilot/settings.local.json
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.venv/

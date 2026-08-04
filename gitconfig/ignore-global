@@ -1,0 +1,22 @@
+# OS / editor junk
+.DS_Store
+*~
+*.swp
+*.swo
+.idea/
+.vscode/settings.json
+
+# Secrets
+.env
+*.pem
+*.key
+*.secret
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Node
+node_modules/

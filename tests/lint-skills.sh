@@ -205,6 +205,8 @@ echo "==> 6. Forbidden strings (source-harness residue)"
 
 LINEAGE_SCOPE=()
 while IFS= read -r f; do LINEAGE_SCOPE+=("$f"); done < <(find copilot bin hooks -type f 2>/dev/null | sort)
+[[ -f AGENTS.md ]] && LINEAGE_SCOPE+=("AGENTS.md")
+[[ -f zatpilot.env-install.sh ]] && LINEAGE_SCOPE+=("zatpilot.env-install.sh")
 
 for f in "${LINEAGE_SCOPE[@]}"; do
   base=$(basename "$f")
@@ -320,6 +322,19 @@ has "${CR_SKILL}" "verbatim" "codereview skill: relays reports verbatim"
 has "${SEC_SKILL}" "the security agent" "security skill: dispatches the auditor"
 has "${SEC_SKILL}" "Never audit in this context" "security skill: dispatch-only rule"
 has "${SEC_SKILL}" "never poll" "security skill: no-polling rule"
+
+# Global instructions carry the gate convention and the plan-then-spec
+# convention; wording must match the hook and the spec skill.
+GI="copilot/global-copilot-instructions.md"
+if [[ -f "${GI}" ]]; then
+  has "${GI}" "two separate commands" "global instructions: bypass form matches hook"
+  has "${GI}" "never suggest it" "global instructions: bypass never suggested"
+  has "${GI}" 'run `/codereview` automatically' "global instructions: blocked push runs review unprompted"
+  has "${GI}" "exit plan mode and" "global instructions: plan-approval exit convention"
+  has "${GI}" "the spec is the contract" "global instructions: spec-first rationale"
+  has "${GI}" 'run `/spec plan`' "global instructions: plan handoff names /spec plan"
+  has "${SPEC_SKILL:-copilot/skills/spec/SKILL.md}" 'exit plan mode' "spec: names the plan-approval exit convention"
+fi
 
 # ============================================================
 echo ""

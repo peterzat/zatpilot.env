@@ -143,10 +143,13 @@ The review cycle, orchestrated by the `/codereview` skill:
 4. Codereview agent (verify mode): confirms security freshness and resolution,
    re-runs tests, and only then writes the push marker and the final entry.
 
-The reviewer cannot edit files (its tool list excludes edit and write); the
-fixer edits but is forbidden from judging its own fixes. An agent that fixes
-its own findings is biased toward confirming the fix worked, so the roles
-never collapse into one context.
+The reviewer's tool list excludes edit and write, and the dispatch layer
+refuses to route edits through it; the fixer edits but is forbidden from
+judging its own fixes. The exclusion is friction, not physics: shell remains
+a write primitive (the reviewer needs it for git, tests, and the marker), so
+the operative controls are the never-fix prompt and verify mode re-reviewing
+whatever changed. An agent that fixes its own findings is biased toward
+confirming the fix worked, so the roles never collapse into one context.
 
 ## The pre-push gate
 
@@ -294,12 +297,15 @@ than controlling how the model implements. Implementation instructions age
 badly as models improve; verification contracts do not. This is the bitter
 lesson applied to harness design.
 
-**Two kinds of enforcement.** Some safety properties are enforced by code: the
-pre-push hook denies pushes without a matching diff hash, and the reviewer
-agent's tool list excludes edit and write. Others are enforced by prompt
-instructions: the 3-cycle fix limit, "never fix code yourself," the finding
-format contract. Prompt-enforced properties are non-deterministic; the LLM
-usually follows them, but compliance is not guaranteed. This is a deliberate
+**Two kinds of enforcement.** One safety property is enforced by code: the
+pre-push hook denies pushes without a matching diff hash. Everything else is
+prompt-enforced, some of it backed by structural friction: the reviewer's
+tool list excludes the edit and write tools, but shell remains a write
+primitive by necessity, so that boundary is friction, not prevention (live
+validation confirmed a directly instructed agent will write through shell).
+The 3-cycle fix limit, "never fix code yourself," and the finding format
+contract are prompt-only. Prompt-enforced properties are non-deterministic;
+the LLM usually follows them, but compliance is not guaranteed. This is a deliberate
 trade-off. Hard-coding every constraint would make the system rigid. Instead:
 hard gates for irreversible actions (pushing code), prompt instructions for
 everything else, and structural tests (`tests/lint-skills.sh`) that verify the

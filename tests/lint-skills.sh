@@ -372,7 +372,8 @@ has "${SPEC_SKILL}" 'STOP and wait' "spec: stops after writing, no implementatio
 # Plan adoption is context-first with a confirmed fallback.
 has "${SPEC_SKILL}" 'approved in this session' "spec: plan adoption reads the conversation first"
 has "${SPEC_SKILL}" 'session-state' "spec: session-store fallback present"
-has "${SPEC_SKILL}" 'Do not adopt unconfirmed' "spec: fallback plan requires confirmation"
+has "${SPEC_SKILL}" 'ground it before adopting' "spec: fallback plan is grounded against the repo"
+has "${SPEC_SKILL}" 'Never adopt an ambiguous' "spec: ambiguous fallback plans require confirmation"
 has "${SPEC_SKILL}" 'Never delete or modify a session-store plan file' "spec: plans are replay sources"
 has "${SPEC_SKILL}" 'prose becomes contract' "spec: pressure test framing for plans"
 
@@ -464,6 +465,8 @@ if [[ -f README.md ]]; then
   has README.md 'Timeouts fail open|timeouts fail open' "README: names the fail-open residual risk"
   has README.md '## Differences from zat' "README: differences section below the fold"
   has README.md 'hard fork' "README: states the fork relationship"
+  has README.md 'friction, not' "README: reviewer boundary stated honestly (validated live)"
+  has "${CR_AGENT}" 'separate simple' "codereview agent: bookkeeping reads as simple commands"
   # Coding Practices mirror: first and last bullets pinned in both files.
   for phrase in 'Work in small, committable increments' 'pushing is a shared-state action'; do
     has README.md "${phrase}" "README: coding practices mirror (${phrase%% *} bullet)"

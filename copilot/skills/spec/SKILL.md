@@ -290,9 +290,15 @@ contract the review loop verifies against.
      ls -t "${COPILOT_HOME:-$HOME/.copilot}/session-state"/*/plan.md 2>/dev/null | head -1
      ```
      This is an undocumented internal layout and the file may belong to a
-     different project's session. Print the path and its modification time,
-     show the plan's first heading or opening lines, and ask the user to
-     confirm it is the right plan before adopting. Do not adopt unconfirmed.
+     different project's session, so ground it before adopting: every file
+     or path the plan names must exist in this repository, and the plan
+     must read as written for this codebase. When the grounding is
+     unambiguous, adopt without a confirmation round-trip and state the
+     path and modification time of the plan you used. When any named file
+     is absent, nothing in the plan anchors to this repository, or the
+     match is otherwise ambiguous, show the path, modification time, and
+     opening lines and ask the user to confirm. Never adopt an ambiguous
+     plan unconfirmed.
    - **Neither.** Stop with: "No plan found in this conversation or the
      session store. Enter plan mode (Shift+Tab or /plan), approve a plan,
      choose 'exit plan mode', then run `/spec plan`. Or use `/spec new` for

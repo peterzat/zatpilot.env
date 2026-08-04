@@ -83,6 +83,11 @@ git diff              # unstaged changes
 git diff --cached     # staged changes
 ```
 
+Run bookkeeping reads (marker values, shas, dates) as separate simple
+commands. The CLI blocks compound chains of command substitutions as
+dangerous, and separate commands also survive being split across shell
+calls.
+
 **Determine the review scope.** Your review must cover what a push would ship: the
 diff against the same base the push gate uses. Resolve that base with the shared
 script (on PATH; do not prefix with `bin/`):

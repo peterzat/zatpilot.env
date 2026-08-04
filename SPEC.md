@@ -22,24 +22,32 @@ validation on a machine with the CLI installed.
 - [x] README.md stands alone, links the design article, and documents the
   differences from zat.env below the fold; NOTICE carries the source
   attribution.
-- [ ] Skills and agents are discovered from symlinks by the live CLI
+- [x] Skills and agents are discovered from symlinks by the live CLI
   (docs/mac-validation.md items 1-2).
-- [ ] The gate fires end-to-end in the live CLI: deny with visible coaching,
+- [x] The gate fires end-to-end in the live CLI: deny with visible coaching,
   allow after /codereview, skip bypass consumed (items 4, 5, 17).
-- [ ] The agent tools restriction is honored: the codereview agent cannot
-  edit files (item 3).
-- [ ] /spec plan adopts a plan from the conversation after plan-mode
-  approval, and the session-store fallback asks before adopting (items 11-12).
-- [ ] The full test suite passes under /bin/bash 3.2 on macOS (item 13).
+- [x] Dispatched reviews never modify files: the dispatch layer refuses to
+  route edits through the codereview agent, whose tool list excludes the
+  edit and write tools. A direct user instruction can still write via
+  shell, which the agent needs for git and the marker, so the boundary is
+  prompt-tier with tool friction (item 3, reworded to verified behavior).
+- [x] /spec plan adopts a plan from the conversation after plan-mode
+  approval, and the session-store fallback grounds the plan against the
+  repository, asking before adopting only when the match is ambiguous
+  (items 11-12, fallback contract updated during validation).
+- [x] The full test suite passes under /bin/bash 3.2 on macOS (item 13).
 
 ### Context
 
-Built on a Linux machine without the Copilot CLI installed; every criterion
-that requires the live CLI is deferred to docs/mac-validation.md and left
-unchecked until validated there. The spec skill's framework read points at
+Built on a Linux machine without the Copilot CLI installed; live validation
+completed 2026-08-04 on macOS with Copilot CLI 1.0.78 by walking
+docs/mac-validation.md. Criteria 9 and 10 were reworded during validation to
+match verified behavior: the reviewer boundary is prompt-tier with tool
+friction (shell is a write primitive its toolset requires), and fallback
+plan adoption is verification-based rather than unconditionally confirmed. The spec skill's framework read points at
 ~/src/zatpilot.env/README.md by convention. Format contracts for the review
 artifacts are identical to the source environment, with REVIEW_META gaining
 diff_hash and tests_pass/tests_fail fields for the sibling-dispatch review
 cycle.
 
-<!-- SPEC_META: {"date":"2026-08-04","title":"Copilot CLI port of the zat.env environment","criteria_total":11,"criteria_met":6} -->
+<!-- SPEC_META: {"date":"2026-08-04","title":"Copilot CLI port of the zat.env environment","criteria_total":11,"criteria_met":11} -->

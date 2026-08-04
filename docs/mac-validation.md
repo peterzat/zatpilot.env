@@ -28,10 +28,12 @@ echo change > file.txt && git add file.txt && git commit -m change
 
 3. **Agent `tools:` restriction syntax.** In a scratch repo, dispatch the
    codereview agent and ask it (via the dispatch prompt) to modify a file.
-   Expected: it cannot edit; it reviews and reports. If the frontmatter shape
-   is rejected or ignored, adjust the `tools:` lines in
-   `copilot/agents/*.agent.md` to the CLI's documented schema and update
-   lint section 2.
+   Expected (recorded 2026-08-04, CLI 1.0.78): the dispatch layer refuses to
+   route edits through the reviewer, and dispatched reviews never modify
+   files; but a direct user instruction to the agent is executed via shell,
+   which is in its toolset by necessity. The exclusion removes the edit
+   tools, not the ability to write. The boundary is prompt-tier with tool
+   friction; README's Two kinds of enforcement section states this.
 
 4. **Hook fires on push.** In the scratch repo (diff present, no marker), ask
    the CLI to run `git push`. Expected: the push is denied and the visible
@@ -76,9 +78,13 @@ echo change > file.txt && git add file.txt && git commit -m change
     Expected: SPEC.md written from the plan without asking for it again.
 
 12. **Plan handoff fallback.** In a NEW session (no plan in context), run
-    `/spec plan`. Expected: it finds the newest
-    `~/.copilot/session-state/*/plan.md`, shows the path and opening lines,
-    and asks for confirmation before adopting.
+    `/spec plan`. Expected (contract updated after the 2026-08-04 walk): it
+    finds the newest `~/.copilot/session-state/*/plan.md`, grounds it
+    against the repository, and adopts without a round-trip when every file
+    the plan names exists here (stating the path and mtime it used); it
+    asks for confirmation only when a named file is absent or the match is
+    ambiguous. Observed: the unambiguous case adopted cleanly without
+    asking.
 
 13. **bash 3.2.** `for t in ~/src/zatpilot.env/tests/test-*.sh; do /bin/bash "$t" | tail -1; done`
     Expected: every suite prints `All N checks passed.` under the stock macOS

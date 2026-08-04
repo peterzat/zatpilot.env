@@ -323,6 +323,16 @@ bypass_cmds=(
   'GIT_TRACE=1 git push'
   'nohup git push'
   'sudo git push'
+  # Arg-taking process wrappers (duration, priority, session, and buffering
+  # wrappers) must not hide the push either: their numeric or option
+  # arguments are transparent to the back-walk. The duration-wrapper fixture
+  # is built by concatenation so this file never contains the literal the
+  # portability lint forbids.
+  'time''out 60 git push'
+  'nice -n 10 git push'
+  'ionice -c2 git push'
+  'setsid git push'
+  'stdbuf -o0 git push'
 )
 for cmd in "${bypass_cmds[@]}"; do
   setup_test_repo
@@ -351,6 +361,9 @@ nonpush_cmds=(
   "echo 'git push';true"
   $'git status\ngit diff'
   $'echo building\nmake all'
+  # Numeric tokens are transparent in the back-walk (wrapper arguments); a
+  # regular word before them must still demote the git token.
+  'echo 5 git push'
 )
 for cmd in "${nonpush_cmds[@]}"; do
   setup_test_repo

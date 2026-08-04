@@ -395,10 +395,15 @@ is checked against files and git.
 1. Read CODEREVIEW.md and extract REVIEW_META (`block`, `diff_hash`,
    `tests_pass`, `tests_fail`, `reviewed_up_to`).
 2. Read SECURITY.md and extract SECURITY_META. Re-run the Step 5 freshness
-   logic against the current state. If the scan does not cover the current
-   surface, STOP and report `BLOCKED: security scan is stale or missing`;
-   do not write the marker. (Exception: light-tier reviews skip the
-   security chain; a light tier recorded in REVIEW_META passes this gate.)
+   logic, with one adjustment: when computing changes since the scan, ignore
+   modifications to files that carry findings in CODEREVIEW.md or
+   SECURITY.md. Those are the fix cycle's own edits, and Step V.3 re-reviews
+   them; treating them as staleness would deadlock the cycle. Any OTHER file
+   changed since the scan does make it stale. If the scan never covered the
+   pre-fix surface, or is stale under this rule, STOP and report
+   `BLOCKED: security scan is stale or missing`; do not write the marker.
+   (Exception: light-tier reviews skip the security chain; a light tier
+   recorded in REVIEW_META passes this gate.)
 3. Compute the current diff hash: `codereview-marker hash`.
 
 ### Step V.2: Short-circuit for an unchanged clean diff

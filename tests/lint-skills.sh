@@ -273,7 +273,7 @@ echo "==> 8. Writing style (no decorative glyphs)"
 # checkbox use (checked when a criterion is verified).
 
 STYLE_SCOPE=()
-while IFS= read -r f; do STYLE_SCOPE+=("$f"); done < <(find . -maxdepth 2 -type f \( -name '*.md' -o -name '*.sh' -o -path './bin/*' \) -not -path './.git/*' -not -name 'LICENSE' 2>/dev/null | sort)
+while IFS= read -r f; do STYLE_SCOPE+=("$f"); done < <(find . -maxdepth 4 -type f \( -name '*.md' -o -name '*.sh' -o -path './bin/*' \) -not -path './.git/*' -not -name 'LICENSE' 2>/dev/null | sort)
 
 for f in "${STYLE_SCOPE[@]}"; do
   base=$(basename "$f")
@@ -282,7 +282,48 @@ done
 
 # ============================================================
 echo ""
-echo "==> 9. shellcheck (when available)"
+echo "==> 9. Skill frontmatter and trampoline contracts"
+# ============================================================
+#
+# Trampoline skills preserve the slash surface but must never do the
+# verification work in the calling context; the whole architecture rests
+# on dispatch. Names must match directory names (Copilot requirement).
+
+SKILLS_DIR="copilot/skills"
+for f in "${SKILLS_DIR}"/*/SKILL.md; do
+  dir=$(basename "$(dirname "${f}")")
+  has "${f}" '^name:' "skill ${dir}: has name"
+  has "${f}" '^description:' "skill ${dir}: has description"
+  has "${f}" "^name: ${dir}\$" "skill ${dir}: name matches directory"
+done
+
+CR_SKILL="${SKILLS_DIR}/codereview/SKILL.md"
+SEC_SKILL="${SKILLS_DIR}/security/SKILL.md"
+
+has "${CR_SKILL}" "Never review, fix, or edit files in this context" "codereview skill: dispatch-only rule"
+has "${CR_SKILL}" "the codereview agent" "codereview skill: dispatches the reviewer"
+has "${CR_SKILL}" "the security agent" "codereview skill: dispatches the auditor"
+has "${CR_SKILL}" "the codefix agent" "codereview skill: dispatches the fixer"
+has "${CR_SKILL}" "initial mode" "codereview skill: names initial mode"
+has "${CR_SKILL}" "verify mode" "codereview skill: names verify mode"
+has "${CR_SKILL}" "Cycle limit: 3" "codereview skill: three-cycle cap"
+has "${CR_SKILL}" "never poll" "codereview skill: no-polling rule"
+has "${CR_SKILL}" "codereview-marker hash" "codereview skill: deterministic pre-check"
+has "${CR_SKILL}" "Security scope needed:" "codereview skill: consumes the agent scope line"
+has "${CR_SKILL}" "REVIEW_META" "codereview skill: loop decisions read REVIEW_META from disk"
+has "${CR_SKILL}" "SECURITY_META" "codereview skill: loop decisions read SECURITY_META from disk"
+has "${CR_SKILL}" "two separate commands" "codereview skill: bypass form matches hook wording"
+has "${CR_SKILL}" "Never offer the bypass" "codereview skill: bypass never offered"
+has "${CR_SKILL}" "push now" "codereview skill: bypass reserved for unprompted push-now"
+has "${CR_SKILL}" "verbatim" "codereview skill: relays reports verbatim"
+
+has "${SEC_SKILL}" "the security agent" "security skill: dispatches the auditor"
+has "${SEC_SKILL}" "Never audit in this context" "security skill: dispatch-only rule"
+has "${SEC_SKILL}" "never poll" "security skill: no-polling rule"
+
+# ============================================================
+echo ""
+echo "==> 10. shellcheck (when available)"
 # ============================================================
 
 if command -v shellcheck >/dev/null 2>&1; then

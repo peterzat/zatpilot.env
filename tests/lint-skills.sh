@@ -430,7 +430,24 @@ has "${ARCH_AGENT}" 'HEALTHY' "architect agent: board verdict vocabulary"
 
 # ============================================================
 echo ""
-echo "==> 11. shellcheck (when available)"
+echo "==> 11. Installer contracts"
+# ============================================================
+
+INSTALLER="zatpilot.env-install.sh"
+if [[ -f "${INSTALLER}" ]]; then
+  has "${INSTALLER}" 'EUID' "installer: refuses to run as root"
+  has "${INSTALLER}" 'COPILOT_HOME' "installer: honors COPILOT_HOME"
+  has "${INSTALLER}" 'zatpilot-env.json' "installer: writes the gate hook registration"
+  has "${INSTALLER}" 'timeoutSec: 30' "installer: hook timeoutSec matches hooks/README.md"
+  has "${INSTALLER}" 'include.path' "installer: aliases via guarded include.path"
+  has "${INSTALLER}" 'zshrc' "installer: Darwin PATH goes to zshrc"
+  has "${INSTALLER}" 'never touches' "installer: documents the no-CLI-state rule"
+  has "${INSTALLER}" 'brew install jq' "installer: Darwin jq hint"
+fi
+
+# ============================================================
+echo ""
+echo "==> 12. shellcheck (when available)"
 # ============================================================
 
 if command -v shellcheck >/dev/null 2>&1; then

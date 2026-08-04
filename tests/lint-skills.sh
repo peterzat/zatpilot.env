@@ -447,7 +447,35 @@ fi
 
 # ============================================================
 echo ""
-echo "==> 12. shellcheck (when available)"
+echo "==> 12. README and docs alignment"
+# ============================================================
+#
+# README documents the enforcement model for downstream users; its claims
+# must match what the hook and agents actually do.
+
+if [[ -f README.md ]]; then
+  has README.md 'bitter-lesson-of-agentic-coding' "README: links the design article"
+  has README.md 'Must fix before pushing' "README: severity table matches the gate"
+  has README.md 'two separate commands' "README: bypass form matches hook wording"
+  has README.md 'Timeouts fail open|timeouts fail open' "README: names the fail-open residual risk"
+  has README.md '## Differences from zat' "README: differences section below the fold"
+  has README.md 'hard fork' "README: states the fork relationship"
+  # Coding Practices mirror: first and last bullets pinned in both files.
+  for phrase in 'Work in small, committable increments' 'pushing is a shared-state action'; do
+    has README.md "${phrase}" "README: coding practices mirror (${phrase%% *} bullet)"
+    has copilot/global-copilot-instructions.md "${phrase}" "global instructions: coding practices source (${phrase%% *} bullet)"
+  done
+fi
+if [[ -f docs/mac-validation.md ]]; then
+  has docs/mac-validation.md '/skills list' "mac-validation: covers skill discovery"
+  has docs/mac-validation.md 'toolName' "mac-validation: covers hook wire format"
+  has docs/mac-validation.md '/bin/bash' "mac-validation: covers bash 3.2 run"
+  has docs/mac-validation.md 'session-state' "mac-validation: covers plan fallback"
+fi
+
+# ============================================================
+echo ""
+echo "==> 13. shellcheck (when available)"
 # ============================================================
 
 if command -v shellcheck >/dev/null 2>&1; then

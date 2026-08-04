@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Compute or write the codereview push marker hash.
+#
+# Single source of truth for the marker directory, base derivation,
+# project-hash derivation, and diff-hash computation that the codereview
+# agent (marker write), the pre-push gate hook (marker verify), and
+# codereview-skip (one-shot bypass) all depend on. Keeping this in one
+# script matters: when the same derivation lived as parallel shell
+# snippets in prompt files and hooks, the copies drifted, and agent-run
+# snippets split across separate shell invocations lost their variables
+# and silently computed against the wrong base.
+#
+# Usage:
+#   codereview-marker hash       # print DIFF_HASH to stdout
+#   codereview-marker write      # compute hash and write to marker file
+#   codereview-marker base       # print the review base (ref or empty-tree hash)
+#   codereview-marker path       # print marker file path to stdout
+#   codereview-marker skip-path  # print one-shot skip marker file path to stdout
+#
+# Exit codes:
+#   0  success
+#   1  error (not in a git repo, bad usage)
+#   2  no reviewable changes (empty diff vs upstream after excluding review
+#      output files); informational, no marker written by `write`
+#
+# Marker location:
+#   Markers live in ${XDG_CACHE_HOME:-${HOME}/.cache}/copilot-codereview/
+#   (mode 0700, per-user). The directory is created on demand. A shared
+#   location like /tmp is deliberately avoided: a world-writable directory
+#   is vulnerable to a symlink race when another local user can pre-create
+#   the path.
+#
+# Upstream resolution (three cases):
+#   (a) `@{upstream}` resolves       -> diff against that ref
+#   (b) `@{upstream}` absent but
+#       `origin/<current-branch>`
+#       resolves                     -> diff against `origin/<current-branch>`
+#   (c) neither resolves             -> diff against the empty tree (first
+#                                       push of a new branch)
+
+EXCLUDES=(':!CODEREVIEW.md' ':!SECURITY.md' ':!TESTING.md' ':!SPEC.md')
+
+usage() {
+  cat >&2 <<'EOF'
+codereview-marker: compute or write the codereview push marker hash.
+
+Usage:
+  codereview-marker hash       # print DIFF_HASH to stdout (exit 2 if nothing to review)
+  codereview-marker write      # compute hash and write to marker file
+  codereview-marker base       # print the review base (ref or empty-tree hash)
+  codereview-marker path       # print marker file path to stdout
+  codereview-marker skip-path  # print one-shot skip marker file path to stdout
+EOF
+  exit 1
+}
+
+# Print the SHA-256 of stdin, hash only. sha256sum exists on Linux;
+# macOS ships shasum instead. Both print "<hash>  <name>"; awk keeps
+# the hash column so downstream `cut` truncation sees identical input
+# on both platforms.
+_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | awk '{print $1}'
+  else
+    shasum -a 256 | awk '{print $1}'
+  fi
+}
+
+require_git() {
+  git rev-parse --show-toplevel >/dev/null 2>&1 || {
+    echo "codereview-marker: not in a git repository" >&2
+    exit 1
+  }
+}
+
+proj_hash() {
+  git rev-parse --show-toplevel | _sha256 | cut -c1-8
+}
+
+marker_dir() {
+  local d="${XDG_CACHE_HOME:-${HOME}/.cache}/copilot-codereview"
+  mkdir -p "${d}"
+  chmod 700 "${d}"
+  printf '%s' "${d}"
+}
+
+marker_path() {
+  printf '%s/marker-%s\n' "$(marker_dir)" "$(proj_hash)"
+}
+
+skip_path() {
+  printf '%s/skip-%s\n' "$(marker_dir)" "$(proj_hash)"
+}
+
+resolve_base() {
+  local upstream
+  upstream=$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null) \
+    || upstream="origin/$(git rev-parse --abbrev-ref HEAD)"
+  if git rev-parse "${upstream}" >/dev/null 2>&1; then
+    printf '%s' "${upstream}"
+  else
+    git hash-object -t tree /dev/null
+  fi
+}
+
+compute_hash() {
+  local base
+  base=$(resolve_base)
+  if git diff --quiet "${base}" -- "${EXCLUDES[@]}" 2>/dev/null; then
+    printf 'codereview-marker: no reviewable changes vs %s\n' "${base}" >&2
+    return 2
+  fi
+  git diff "${base}" -- "${EXCLUDES[@]}" 2>/dev/null | _sha256 | cut -c1-16
+}
+
+case "${1:-}" in
+  hash)
+    require_git
+    compute_hash
+    ;;
+  write)
+    require_git
+    if hash=$(compute_hash); then
+      printf '%s\n' "${hash}" > "$(marker_path)"
+    else
+      exit $?
+    fi
+    ;;
+  base)
+    require_git
+    printf '%s\n' "$(resolve_base)"
+    ;;
+  path)
+    require_git
+    marker_path
+    ;;
+  skip-path)
+    require_git
+    skip_path
+    ;;
+  *)
+    usage
+    ;;
+esac

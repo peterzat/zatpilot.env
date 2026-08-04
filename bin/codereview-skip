@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Create a one-time bypass marker so the next git push skips the
+# codereview pre-push gate. The marker is consumed by the hook on
+# the next push attempt.
+#
+# Path is single-sourced via `codereview-marker skip-path` so this
+# script and the pre-push hook agree without duplicating the
+# project-hash derivation or the marker-directory layout.
+#
+# Usage: run `codereview-skip`, then `git push` as a separate command.
+# A combined `codereview-skip && git push` is blocked: the gate
+# inspects the whole command before anything runs, when the skip
+# marker does not exist yet.
+
+SKIP_PATH=$(codereview-marker skip-path) || exit $?
+
+# The skip marker carries no content; it is a presence-only signal.
+# Cross-user symlink attacks are blocked at the directory level
+# (codereview-marker creates the parent at mode 0700), so a plain
+# touch is safe.
+touch "${SKIP_PATH}"

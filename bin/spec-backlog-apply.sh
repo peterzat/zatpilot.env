@@ -1,0 +1,277 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Apply a BACKLOG sweep manifest (read from stdin) to BACKLOG.md.
+#
+# Deterministic counterpart to the /spec skill's proposal-consume step
+# (Step 3g) and /tester design mode. Keeps BACKLOG.md mutations out of
+# LLM-executed file edits.
+#
+# Invocation:
+#   spec-backlog-apply.sh <<'MANIFEST'
+#   delete: <heading as it appears or appeared in BACKLOG.md>
+#   adopt: <heading> | <YYYY-MM-DD>
+#   purge-origin: <origin prefix>
+#   append: <heading>
+#   <entry body lines, verbatim>
+#   end-append
+#   MANIFEST
+#
+# Heading matching strips any trailing "(ACTIVE in spec YYYY-MM-DD)" on
+# both sides, so the manifest may name a heading with or without annotation.
+#
+# purge-origin removes every entry whose Origin field starts with the
+# given prefix (backticks stripped), except entries whose heading carries
+# an (ACTIVE in spec ...) annotation. Zero matches is a success; one
+# PURGED line is reported per removed entry.
+#
+# append writes a new entry "### <heading>\n<body>" to BACKLOG.md. The
+# body spans every manifest line between "append: <heading>" and the
+# next "end-append" line (exact match, no leading whitespace). An
+# already-present heading (with or without an ACTIVE annotation) emits
+# SKIPPED and no write; otherwise APPENDED and the entry is added. If
+# BACKLOG.md does not exist and the manifest has append ops, the file is
+# created with the standard `# Backlog` header. Ops run in parse order
+# where independent; across op types the order is delete, adopt, purge,
+# append.
+
+BACKLOG=BACKLOG.md
+
+manifest=$(cat)
+[[ -n "$manifest" ]] || exit 0
+
+strip_annot() {
+  sed -E 's/ \(ACTIVE in spec [0-9]{4}-[0-9]{2}-[0-9]{2}\)$//'
+}
+
+deletes=()
+adopt_headers=()
+adopt_dates=()
+purge_prefixes=()
+append_headers=()
+append_bodies=()
+in_append=0
+current_header=""
+current_body=""
+while IFS= read -r line; do
+  if [[ "$in_append" -eq 1 ]]; then
+    if [[ "$line" == "end-append" ]]; then
+      append_headers+=("$current_header")
+      append_bodies+=("$current_body")
+      in_append=0
+      current_header=""
+      current_body=""
+      continue
+    fi
+    if [[ -z "$current_body" ]]; then
+      current_body="$line"
+    else
+      current_body+=$'\n'"$line"
+    fi
+    continue
+  fi
+  line="${line# }"
+  case "$line" in
+    delete:*)
+      hdr="${line#delete:}"
+      hdr="${hdr# }"
+      hdr=$(printf '%s' "$hdr" | strip_annot)
+      [[ -n "$hdr" ]] && deletes+=("$hdr")
+      ;;
+    adopt:*)
+      spec_line="${line#adopt:}"
+      spec_line="${spec_line# }"
+      hdr="${spec_line% | *}"
+      date="${spec_line##* | }"
+      hdr=$(printf '%s' "$hdr" | strip_annot)
+      if [[ -n "$hdr" && -n "$date" && "$hdr" != "$date" ]]; then
+        adopt_headers+=("$hdr")
+        adopt_dates+=("$date")
+      fi
+      ;;
+    purge-origin:*)
+      prefix="${line#purge-origin:}"
+      prefix="${prefix# }"
+      prefix="${prefix%"${prefix##*[![:space:]]}"}"
+      [[ -n "$prefix" ]] && purge_prefixes+=("$prefix")
+      ;;
+    append:*)
+      hdr="${line#append:}"
+      hdr="${hdr# }"
+      hdr=$(printf '%s' "$hdr" | strip_annot)
+      if [[ -n "$hdr" ]]; then
+        in_append=1
+        current_header="$hdr"
+        current_body=""
+      fi
+      ;;
+  esac
+done <<< "$manifest"
+
+if [[ "$in_append" -eq 1 ]]; then
+  printf 'ERROR: append block for %s missing end-append delimiter\n' \
+    "$current_header" >&2
+  exit 1
+fi
+
+total_ops=$((${#deletes[@]} + ${#adopt_headers[@]} + ${#purge_prefixes[@]} + ${#append_headers[@]}))
+[[ "$total_ops" -gt 0 ]] || exit 0
+
+if [[ ! -f "$BACKLOG" ]] && [[ "${#append_headers[@]}" -gt 0 ]]; then
+  cat > "$BACKLOG" <<'HEADER'
+# Backlog
+
+Durable register of considered proposals that were deferred, scoped out, or
+rejected. Read before drafting a new SPEC.md; swept at turn close.
+HEADER
+fi
+
+if [[ ! -f "$BACKLOG" ]]; then
+  printf 'BACKLOG.md not found; skipping %d op(s)\n' "$total_ops" >&2
+  exit 0
+fi
+
+miss=0
+
+# Loop guards use the ${arr[@]+"${arr[@]}"} idiom: bash 3.2 (stock macOS
+# /bin/bash) treats an empty array expansion as unset under `set -u`, so an
+# unguarded loop crashes whenever a manifest omits that op type.
+for target in ${deletes[@]+"${deletes[@]}"}; do
+  tmp=$(mktemp)
+  if awk -v t="$target" '
+    BEGIN { done=0 }
+    {
+      if (!done && /^### /) {
+        hdr=$0
+        sub(/^### /, "", hdr)
+        sub(/ \(ACTIVE in spec [0-9]{4}-[0-9]{2}-[0-9]{2}\)$/, "", hdr)
+        if (hdr == t) { deleting=1; done=1; next }
+      }
+      if (deleting && (/^### / || /^## /)) { deleting=0 }
+      if (!deleting) print
+    }
+    END { exit !done }
+  ' "$BACKLOG" > "$tmp"; then
+    mv "$tmp" "$BACKLOG"
+    printf 'DELETED: %s\n' "$target"
+  else
+    rm -f "$tmp"
+    printf 'MISS: delete: %s (heading not found)\n' "$target" >&2
+    miss=1
+  fi
+done
+
+for i in ${adopt_headers[@]+"${!adopt_headers[@]}"}; do
+  target="${adopt_headers[$i]}"
+  date="${adopt_dates[$i]}"
+  tmp=$(mktemp)
+  if awk -v t="$target" -v d="$date" '
+    BEGIN { done=0 }
+    {
+      if (!done && /^### /) {
+        hdr=$0
+        sub(/^### /, "", hdr)
+        sub(/ \(ACTIVE in spec [0-9]{4}-[0-9]{2}-[0-9]{2}\)$/, "", hdr)
+        if (hdr == t) {
+          print "### " t " (ACTIVE in spec " d ")"
+          done=1
+          next
+        }
+      }
+      print
+    }
+    END { exit !done }
+  ' "$BACKLOG" > "$tmp"; then
+    mv "$tmp" "$BACKLOG"
+    printf 'ANNOTATED: %s (ACTIVE in spec %s)\n' "$target" "$date"
+  else
+    rm -f "$tmp"
+    printf 'MISS: adopt: %s (heading not found)\n' "$target" >&2
+    miss=1
+  fi
+done
+
+for prefix in ${purge_prefixes[@]+"${purge_prefixes[@]}"}; do
+  tmp=$(mktemp)
+  purged_list=$(mktemp)
+  awk -v prefix="$prefix" -v purged_file="$purged_list" '
+    function flush_entry() {
+      if (!in_entry) return
+      should_purge = 0
+      if (!has_active) {
+        for (i = 1; i <= buf_len; i++) {
+          if (buf[i] ~ /\*\*Origin:\*\*/) {
+            origin = buf[i]
+            sub(/^.*\*\*Origin:\*\*[[:space:]]*/, "", origin)
+            gsub(/`/, "", origin)
+            sub(/[[:space:]]+$/, "", origin)
+            if (index(origin, prefix) == 1) {
+              should_purge = 1
+              break
+            }
+          }
+        }
+      }
+      if (should_purge) {
+        print entry_heading >> purged_file
+      } else {
+        for (i = 1; i <= buf_len; i++) print buf[i]
+      }
+      in_entry = 0
+      buf_len = 0
+      has_active = 0
+      entry_heading = ""
+    }
+    /^### / {
+      flush_entry()
+      in_entry = 1
+      entry_heading = $0
+      sub(/^### /, "", entry_heading)
+      if (entry_heading ~ / \(ACTIVE in spec [0-9]{4}-[0-9]{2}-[0-9]{2}\)$/) {
+        has_active = 1
+      }
+      buf[++buf_len] = $0
+      next
+    }
+    /^## / {
+      flush_entry()
+      print
+      next
+    }
+    in_entry {
+      buf[++buf_len] = $0
+      next
+    }
+    { print }
+    END { flush_entry() }
+  ' "$BACKLOG" > "$tmp"
+  mv "$tmp" "$BACKLOG"
+  while IFS= read -r purged_heading; do
+    printf 'PURGED: %s (origin prefix: %s)\n' "$purged_heading" "$prefix"
+  done < "$purged_list"
+  rm -f "$purged_list"
+done
+
+for i in ${append_headers[@]+"${!append_headers[@]}"}; do
+  hdr="${append_headers[$i]}"
+  body="${append_bodies[$i]}"
+  if awk -v t="$hdr" '
+    /^### / {
+      h=$0
+      sub(/^### /, "", h)
+      sub(/ \(ACTIVE in spec [0-9]{4}-[0-9]{2}-[0-9]{2}\)$/, "", h)
+      if (h == t) { found=1; exit }
+    }
+    END { exit !found }
+  ' "$BACKLOG"; then
+    printf 'SKIPPED: %s (heading already present)\n' "$hdr"
+    continue
+  fi
+  printf '\n### %s\n%s\n' "$hdr" "$body" >> "$BACKLOG"
+  printf 'APPENDED: %s\n' "$hdr"
+done
+
+count=$(awk '/^```/{f=!f; next} !f && /^### /{n++} END{print n+0}' "$BACKLOG")
+printf 'BACKLOG.md: %s entries\n' "$count"
+
+exit "$miss"

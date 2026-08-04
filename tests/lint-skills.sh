@@ -323,7 +323,99 @@ has "${SEC_SKILL}" "never poll" "security skill: no-polling rule"
 
 # ============================================================
 echo ""
-echo "==> 10. shellcheck (when available)"
+echo "==> 10. Spec, tester, pr contracts"
+# ============================================================
+#
+# The spec turn cycle, the tester design flow, and the pr merge gate all
+# promise exact strings to the backlog script, the artifact formats, and
+# each other.
+
+SPEC_SKILL="${SKILLS_DIR}/spec/SKILL.md"
+PR_SKILL="${SKILLS_DIR}/pr/SKILL.md"
+TESTER_SKILL="${SKILLS_DIR}/tester/SKILL.md"
+ARCH_SKILL="${SKILLS_DIR}/architect/SKILL.md"
+TESTER_AGENT="${AGENTS_DIR}/tester.agent.md"
+ARCH_AGENT="${AGENTS_DIR}/architect.agent.md"
+BACKLOG_SCRIPT="bin/spec-backlog-apply.sh"
+
+# Spec mode router and guards.
+has "${SPEC_SKILL}" 'Wins over every other branch' "spec: plan keyword wins routing"
+has "${SPEC_SKILL}" 'Stale proposal guard' "spec: stale-proposal guard present"
+has "${SPEC_SKILL}" '5 or more' "spec: staleness threshold stated"
+has "${SPEC_SKILL}" 'Under-specification escape hatch' "spec: escape hatch present"
+has "${SPEC_SKILL}" 'too under-specified to produce testable acceptance criteria' "spec: escape hatch message"
+has "${SPEC_SKILL}" 'Acceptance criteria are tests' "spec: criteria-are-tests principle"
+has "${SPEC_SKILL}" 'Bias toward keep when unsure' "spec: sweep bias to keep"
+has "${SPEC_SKILL}" 'the script owns all mutations' "spec: script-only BACKLOG mutation"
+has "${SPEC_SKILL}" 'spec-backlog-apply.sh' "spec: names the mutation script"
+has "${SPEC_SKILL}" 'STOP and wait' "spec: stops after writing, no implementation"
+
+# Plan adoption is context-first with a confirmed fallback.
+has "${SPEC_SKILL}" 'approved in this session' "spec: plan adoption reads the conversation first"
+has "${SPEC_SKILL}" 'session-state' "spec: session-store fallback present"
+has "${SPEC_SKILL}" 'Do not adopt unconfirmed' "spec: fallback plan requires confirmation"
+has "${SPEC_SKILL}" 'Never delete or modify a session-store plan file' "spec: plans are replay sources"
+has "${SPEC_SKILL}" 'prose becomes contract' "spec: pressure test framing for plans"
+
+# Manifest op parity between the spec skill's documentation and the script.
+for op in 'delete:' 'adopt:' 'purge-origin:' 'append:' 'end-append'; do
+  has "${SPEC_SKILL}" "${op}" "spec: documents manifest op ${op}"
+  has "${BACKLOG_SCRIPT}" "${op}" "script: implements manifest op ${op}"
+done
+for tag in 'DELETED:' 'ANNOTATED:' 'PURGED:' 'APPENDED:' 'SKIPPED:' 'MISS' 'entries' ; do
+  has "${BACKLOG_SCRIPT}" "${tag}" "script: emits ${tag} lines"
+done
+
+# SPEC_META field parity: writer (spec) and reader (pr body composition).
+has "${SPEC_SKILL}" '"criteria_total"' "spec: SPEC_META criteria_total"
+has "${SPEC_SKILL}" '"criteria_met"' "spec: SPEC_META criteria_met"
+has "${PR_SKILL}" 'criteria_met/criteria_total' "pr: reads spec progress fields"
+
+# BACKLOG four-field template appears in both producers.
+for fld in 'One-line description' 'Why deferred:' 'Revisit criteria:' 'Origin:'; do
+  has "${SPEC_SKILL}" "${fld}" "spec: BACKLOG template field ${fld}"
+  has "${TESTER_AGENT}" "${fld}" "tester agent: BACKLOG template field ${fld}"
+done
+has "${SPEC_SKILL}" 'Revisit criteria are mandatory' "spec: revisit criteria mandatory rule"
+
+# Tester design contracts.
+has "${TESTER_AGENT}" '# Durable test-architecture contract' "tester agent: exact contract H1"
+has "${TESTER_AGENT}" 'tester design YYYY-MM-DD' "tester agent: canonical Origin form"
+has "${TESTER_AGENT}" 'purge-origin: tester design' "tester agent: revision purge op"
+has "${TESTER_AGENT}" '## Pre-apply checklist' "tester agent: literal checklist heading"
+has "${TESTER_AGENT}" 'Do not invoke any file-mutating tool' "tester agent: checklist precedes mutation"
+has "${TESTER_AGENT}" 'Flag, never block' "tester agent: SPEC tension flags without halting"
+has "${TESTER_AGENT}" 'proxy' "tester agent: proxy-over-critic philosophy"
+has "${TESTER_AGENT}" 'git checkout TESTING.md' "tester agent: git is the undo mechanism"
+D4_LINE=$(line_of "${TESTER_AGENT}" 'in memory')
+D6_LINE=$(line_of "${TESTER_AGENT}" '^### Step D.6')
+if [[ -n "${D4_LINE}" && -n "${D6_LINE}" && "${D4_LINE}" -lt "${D6_LINE}" ]]; then
+  pass "tester agent: draft-in-memory precedes the write step"
+else
+  fail "tester agent: draft-in-memory must precede Step D.6 (draft@${D4_LINE:-none} write@${D6_LINE:-none})"
+fi
+has "${TESTER_AGENT}" 'TESTING_META' "tester agent: audit mode writes TESTING_META"
+
+# pr merge gate.
+has "${PR_SKILL}" 'REVIEW_BLOCKS' "pr: local gate reads block count"
+has "${PR_SKILL}" 'REVIEWED_UP_TO' "pr: local gate reads reviewed_up_to"
+has "${PR_SKILL}" 'merge-base --is-ancestor' "pr: ancestry check in merge gate"
+has "${PR_SKILL}" 'Do not merge without a passing review' "pr: merge gated on review"
+has "${PR_SKILL}" 'Never create a PR unless' "pr: PR creation is opt-in"
+has "${PR_SKILL}" 'reviewDecision' "pr: remote gate reads review decision"
+has "${PR_SKILL}" 'statusCheckRollup' "pr: remote gate reads CI checks"
+
+# Trampoline dispatch for tester and architect.
+has "${TESTER_SKILL}" 'the tester agent' "tester skill: dispatches the agent"
+has "${TESTER_SKILL}" 'Never assess or design in this context' "tester skill: dispatch-only rule"
+has "${ARCH_SKILL}" 'the architect agent' "architect skill: dispatches the agent"
+has "${ARCH_SKILL}" 'Never review in this context' "architect skill: dispatch-only rule"
+has "${ARCH_AGENT}" 'does not produce a persistent output file' "architect agent: terminal node"
+has "${ARCH_AGENT}" 'HEALTHY' "architect agent: board verdict vocabulary"
+
+# ============================================================
+echo ""
+echo "==> 11. shellcheck (when available)"
 # ============================================================
 
 if command -v shellcheck >/dev/null 2>&1; then

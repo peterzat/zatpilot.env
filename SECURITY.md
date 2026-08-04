@@ -1,83 +1,81 @@
-## Security Review — 2026-08-04 (scope: full)
+## Security Review — 2026-08-04 (scope: paths)
 
-**Summary:** Full-repository audit of the zatpilot.env agentic-coding
-environment (shell scripts, the pre-push gate hook, installer, skill/agent
-prompt files, tests). No secret leaks, injection, or credential exposure found.
-Two defense-in-depth gaps in the pre-push gate's push-detection heuristics
-allow real code pushes to silently skip the review gate on realistic input.
+**Summary:** Path-scoped review of the pre-push gate hook and its two test
+suites at commit 27e5c81, following the same-day full audit and fix cycle.
+The two prior WARN bypasses (transparent prefixes, version-like branch
+refspecs) are confirmed fixed and regression-tested (86 hook checks and 446
+lint checks pass). No injection, secret, or data-exposure issues: the guarded
+command string is parsed with jq and used only as data, decisions are emitted
+via `jq --arg`, and history scans of all three files are clean. One WARN
+remains in the same class as the fixed prefix bypass, plus two NOTEs.
 
 ### Threat model note
 
-The pre-push gate is a Copilot CLI `preToolUse` hook: it fires only for pushes
-issued through the CLI agent's shell tool, and its purpose is to keep the agent
-from pushing code that has not passed `/codereview`. It is a self-discipline
-control, not an authentication boundary. A user (or an adversarial agent) has
-trivial documented outs (`codereview-skip`, pushing from a plain terminal,
-running `codereview-marker write` directly). The findings below therefore
-concern silent bypass on non-adversarial input, which is what erodes a
-discipline gate in practice, and are rated WARN accordingly.
+Unchanged from the prior entry: the gate is a self-discipline control on
+agent-issued pushes, not an authentication boundary. Documented outs exist
+(`codereview-skip`, plain-terminal pushes, `codereview-marker write`).
+Findings below concern silent bypass on realistic non-adversarial input.
 
 ### Findings
 
-[WARN] hooks/pre-push-codereview.sh:186-192 — Tag-only heuristic treats any
-`v<digit>` refspec as a tag, so pushing a branch whose name starts with `v` and
-a digit silently skips the gate.
-  Attack vector: The CLI agent runs `git push origin v2feature` (or `v2`,
-  `v1.5-hotfix`, `v3-api`, any branch named `v<digit>...`) with an unreviewed
-  diff. `is_tag_only_push` classifies the refspec as tag-only via the
-  `^v[0-9]` match, the hook abstains, and the code push reaches the remote
-  without `/codereview`. Reproduced: `git push origin v2feature` returns
-  `abstain` from the hook against a repo with an unpushed diff and no marker.
-  Evidence: hooks/pre-push-codereview.sh:191 matches refspecs against
-  `^v[0-9]` to decide "looks like a tag." The regex was intended for version
-  tags (`v1.2.0`) but also matches branch names. The function's own header
-  (lines 141-153) documents that a false positive here SKIPS the gate, and
-  this is a false positive on a common branch-naming convention.
-  Remediation: Restrict the tag heuristic to explicit tag refspecs
-  (`refs/tags/...`), or resolve the refspec against `refs/tags/` in the repo
-  before treating it as a tag, rather than pattern-matching `v<digit>`. Add a
-  regression case (`git push origin v2feature` must deny when a diff exists).
+[WARN] hooks/pre-push-codereview.sh:117-126 — Process wrappers outside the
+transparent-prefix allowlist still hide a push from the gate, most plausibly
+`timeout`.
+  Attack vector: The CLI agent runs `timeout 60 git push` (wrapping a
+  possibly-hanging network command in a timeout is a routine agent pattern)
+  with an unreviewed diff. The command-position back-walk from `git` hits the
+  duration token `60`, which is not an operator, allowlisted prefix word,
+  assignment, or `-option`, so `cmdpos=0` and the hook abstains; the push
+  proceeds unreviewed. Reproduced against the current functions: `timeout 60
+  git push`, `nice git push`, `nice -n 10 git push`, `setsid git push`, and
+  `stdbuf -oL git push` are all MISSED, while the fixed forms (`GIT_TRACE=1
+  git push`, `env git push`) correctly gate.
+  Evidence: hooks/pre-push-codereview.sh:120 allowlists only
+  env/command/exec/nohup/time/sudo/builtin/xargs. Arg-taking wrappers cannot
+  be fixed by extending the list alone: the back-walk sees the wrapper's
+  argument (`60`, `10`) before the wrapper name. Adjacent quoting-class
+  variants (`bash -c "git push"`, `eval git push`) are also missed, but those
+  are adversarial-tier per the threat model; the header's limitation note
+  (lines 67-69) currently documents only quoted paths, not quoted
+  invocations.
+  Remediation: In the back-walk, also skip bare numeric/duration tokens when
+  the preceding word is a known arg-taking wrapper (timeout, nice, nohup,
+  stdbuf, setsid, ionice), or flip the residual bias: treat any `git ... push`
+  token subsequence as reviewable unless preceded by a clearly word-consuming
+  command (the stated bias is over-detection, and a false positive only costs
+  a needless review). Add regression cases for `timeout 60 git push` and
+  `nice git push`, and extend the header limitation note to cover quoted
+  invocations.
 
-[WARN] hooks/pre-push-codereview.sh:102-134 — Push detection only treats a
-`git` token as a command when it is first or follows a shell operator, so any
-prefix word evades the gate.
-  Attack vector: The CLI agent runs a prefixed push form with an unreviewed
-  diff and the hook abstains. Reproduced against a repo with an unpushed diff
-  and no marker: `GIT_TRACE=1 git push`, `env git push`, `command git push`,
-  and `nohup git push` all return `abstain` (a bare `git push` correctly
-  returns `deny`). `GIT_TRACE=1 git push` is the most likely non-adversarial
-  case: adding `GIT_TRACE=1` to debug a failing push is routine, and it
-  silently disables the gate.
-  Evidence: `_push_subcommand_indices` (lines 102-134) counts a `git` token as
-  command-position only if `i == 0` or the previous token matches the operator
-  case at lines 110-113. A variable-assignment prefix (`GIT_TRACE=1`) or a
-  command wrapper (`env`, `command`, `nohup`, `xargs`, `time`, `sudo`) is not
-  an operator, so the following `git` is skipped and no push index is emitted.
-  This is the same class of bypass as the `git -C <dir> push` bug the suite was
-  built to catch (tests/test-pre-push-hook.sh:287-294); the documented
-  limitation at lines 66-69 only covers quoted whitespace paths, not prefixes.
-  Remediation: In the command-position check, skip leading `VAR=value`
-  assignment tokens and known no-op wrappers (`env`, `command`, `nohup`,
-  `time`, `xargs`, `sudo`) before deciding the token is not a command, or treat
-  any `git push` subsequence as reviewable (the function's stated bias is
-  toward over-detection, since a false positive only costs a needless review).
-  Add regression cases for the prefixed forms.
+[NOTE] hooks/pre-push-codereview.sh:199-211 — A branch named exactly like a
+version tag (`v2`, `v1.2`) is presumed a tag and skips the gate.
+  Attack vector: In a repo that keeps a maintenance branch named `v2` (common
+  in library repos), the agent runs `git push origin v2` with an unreviewed
+  diff; the anchored version pattern classifies the refspec as a tag and the
+  hook abstains. Reproduced: `git push origin v2` and `git push origin v1.2`
+  return tag-only against the current functions. This is the documented
+  residual of the accepted 6d87890 fix (the code comment at lines 200-205 and
+  CODEREVIEW.md record the trade-off), so it is rated NOTE, not a re-opened
+  WARN.
+  Evidence: hooks/pre-push-codereview.sh:208 pattern-matches refspecs without
+  consulting the repository; the repo-existence check at line 277 runs after
+  the tag-only check at line 271, so ground truth is available but unused.
+  Remediation: Move the repo check ahead of the tag-only check (outside a
+  repo the hook abstains anyway) and resolve each refspec with `git show-ref
+  --verify refs/tags/<r>`; fall back to the pattern only if the ref does not
+  exist locally. Alternatively record this residual under Accepted Risks.
 
 [NOTE] tests/test-pre-push-hook.sh:131 — Hardcoded developer home path in a
-committed test string.
-  Attack vector: None directly; informational. The literal
-  `"git -C /home/peter/src push"` embeds a real local username/path in a test
-  input. It is used only as a string to tokenize (the test runs in a scratch
-  dir), so it is functionally harmless, but it exposes the username and is
-  inconsistent with the repo's portability ethos and the other tests' use of
-  `/tmp`.
-  Evidence: tests/test-pre-push-hook.sh:131.
-  Remediation: Replace with a neutral path such as `/tmp/x` or `/repo`.
+committed test string. Carried forward unresolved from the prior review
+(same evidence and severity): the literal `git -C /home/peter/src push` is
+detection-fixture data only, functionally harmless, but embeds a real
+username in a committed file. Remediation: replace with a neutral path such
+as `/tmp/x`, or record under Accepted Risks alongside the author-attribution
+item.
 
 ### Accepted Risks
 
-The following are documented, intended residual risks of the gate, not new
-findings. They are recorded here so future reviews do not re-flag them.
+Carried forward from the prior review; all remain applicable.
 
 - Hook timeouts fail open (the CLI proceeds as if allowed if the hook exceeds
   `timeoutSec`). Documented in hooks/README.md and README.md; the script is
@@ -93,5 +91,10 @@ findings. They are recorded here so future reviews do not re-flag them.
   accidental PII. Test placeholders use `test@test.invalid` / `test@example`.
 
 ---
+*Prior review (2026-08-04, scope: full, commit d316277): full-repository
+audit found no secret leaks or injection; two WARN gate bypasses in push
+detection (v-prefixed branch refspecs treated as tags, transparent prefixes
+hiding the git token) plus a hardcoded-path NOTE. Both WARNs were fixed and
+regression-tested in 6d87890.*
 
-<!-- SECURITY_META: {"date":"2026-08-04","commit":"d316277d28f4f0b53fe761554bff7d1427b59eef","scope":"full","block":0,"warn":2,"note":1} -->
+<!-- SECURITY_META: {"date":"2026-08-04","commit":"27e5c81d941734456d5a6bacc6eb6304bd9e667f","scope":"paths","scanned_files":["hooks/pre-push-codereview.sh","tests/lint-skills.sh","tests/test-pre-push-hook.sh"],"block":0,"warn":1,"note":2} -->

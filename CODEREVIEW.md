@@ -1,57 +1,55 @@
-## Review - 2026-08-04 (commit: 6d87890)
+## Review - 2026-08-04 (commit: f4c31f6)
 
-**Summary:** First-push whole-tree review of the initial zatpilot.env port (35
-files) against the empty-tree base, with a chained full security audit. The
-code review pass found no BLOCK or WARN issues in the port itself; the
-security audit surfaced two WARN gate-bypass vectors in the push detection
-heuristics, both fixed and regression-tested across two fix cycles. Test
-suite improved from 650 to 657 checks, all passing; no regressions against
-the baseline. Review caveat: this review ran in the session that authored the
-code rather than in an isolated context; the compensations were fresh
-residue/reference sweeps, a fresh suite run, the independently forked
-security audit, and the per-increment lint and behavior coverage. The fork's
-own isolated-agent review runs as part of live-CLI validation.
+**Summary:** Full review of the validation follow-ups (README and
+mac-validation honesty rewordings, verification-based plan-adoption
+fallback, agent bookkeeping guidance, lint pins), the README onboarding
+restructure (quick start first, typed turn-loop walkthrough), and the
+wrapper-transparency gate fix. The chained scoped security scan
+(hooks/pre-push-codereview.sh, tests/test-pre-push-hook.sh,
+tests/lint-skills.sh) found one WARN, fixed in one cycle with six
+regression cases. Suite grew 660 to 666, all passing, no regressions.
 
 **External reviewers:**
 None configured.
 
 ### Findings
 
-[NOTE] hooks/pre-push-codereview.sh:230 -- toolName filter rests on an unverified live-CLI assumption
-  Evidence: the gate applies only when toolName contains bash or shell; the
-  actual tool name string the CLI sends is unconfirmed until
-  docs/mac-validation.md item 4 runs on a live machine.
-  Suggested fix: none now; validation item already tracks it.
+[NOTE] hooks/pre-push-codereview.sh:199 -- branch named exactly like a version tag skips the gate
+  Evidence: a branch literally named v2 or v1.2 matches the anchored
+  version pattern and is presumed a tag; reproduced by the security scan.
+  Documented residual of the accepted anchoring fix.
+  Suggested fix: none now; cheap hardening later is resolving refspecs via
+  git show-ref --verify refs/tags/<r> with the repo check moved ahead of
+  the tag-only check.
+
+[NOTE] hooks/pre-push-codereview.sh:230 -- toolName filter rests on an unverified assumption on other CLI versions
+  Evidence: validated on 1.0.78 (the shell tool matched); future CLI
+  versions could rename the tool. mac-validation item 4 covers re-checking.
+  Suggested fix: none; validation item tracks it.
 
 [NOTE] tests/test-pre-push-hook.sh:131 -- hardcoded home path in a detection fixture
-  Evidence: `git -C /home/peter/src push` as a token-parsing input; works
-  everywhere but embeds a real username in a committed test string.
+  Evidence: carried forward unresolved from the prior review at unchanged
+  severity.
   Suggested fix: optional; any absolute path exercises the same tokenizer
   behavior.
 
 ### Fixes Applied
 
-- [WARN] hooks/pre-push-codereview.sh:191 -- tag-only heuristic accepted
-  version-like branch names; version pattern anchored to the whole refspec
-  (^v[0-9]+(\.[0-9]+)*$). Branch names like v2feature now gate; genuine tags
-  v1.2, v2.0.0, refs/tags/* still skip. (cycle 1, from the security audit)
-- [WARN] hooks/pre-push-codereview.sh:102 -- command-position rule was
-  defeated by transparent prefixes; replaced with a backward walk over
-  assignments, prefix words (env/command/exec/nohup/time/sudo/builtin/
-  xargs), and option tokens. Prefixed pushes now gate; "echo git push" still
-  passes through. (cycle 1, from the security audit)
-- [WARN] tests/test-pre-push-hook.sh -- added seven regression cases for the
-  hardened detection: five transparent-prefix pushes and two version-like
-  branch refspecs, all asserting deny. (cycle 2)
-- [WARN] tests/lint-skills.sh -- glyph sweep scoped to authored sources;
-  generated review artifacts (CODEREVIEW.md, SECURITY.md, TESTING.md) are
-  exempt and follow their writers' house style. (cycle 2)
+- [WARN] hooks/pre-push-codereview.sh:117 -- arg-taking process wrappers
+  hid pushes from the gate; wrapper word set extended (nice, ionice,
+  setsid, stdbuf, caffeinate, the coreutils duration wrapper) and pure
+  numeric or duration tokens made transparent in the back-walk. Five deny
+  regression cases and one pass-through negative added; verified deny for
+  the wrapper forms and pass-through for "echo 5 git push". (from the
+  scoped security scan)
 
 ### Accepted Risks
 
 None.
 
 ---
-*Prior review: none; this is the first review of the repository.*
+*Prior review (2026-08-04): first-push whole-tree review; two WARN gate
+bypasses found by the full security audit, fixed and regression-tested; 0
+BLOCK remaining.*
 
-<!-- REVIEW_META: {"date":"2026-08-04","commit":"6d87890","reviewed_up_to":"6d87890a163cf99d860e639a322dc12e29b3f5e5","base":"4b825dc642cb6eb9a060e54bf8d69288fbee4904","tier":"full","block":0,"warn":0,"note":2} -->
+<!-- REVIEW_META: {"date":"2026-08-04","commit":"f4c31f6","reviewed_up_to":"f4c31f62a7ba6b68ab165c2bb41a2702ad1988ab","base":"origin/main","tier":"full","block":0,"warn":0,"note":3,"diff_hash":"c56f8e1bde14bc05","tests_pass":666,"tests_fail":0} -->

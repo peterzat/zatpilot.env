@@ -402,7 +402,7 @@ turn closed with a proposal, and this turn adopts it (or a chosen
 direction within it) as the new spec's direction. BACKLOG.md mutations
 from the proposal's `### Backlog Sweep` subsection and any revived
 `### Revisit candidates` are applied here mechanically via
-`spec-backlog-apply.sh`. Do not edit BACKLOG.md yourself at any point
+`spec-backlog-apply`. Do not edit BACKLOG.md yourself at any point
 in this flow; the script owns all mutations.
 
 Execute these steps in order.
@@ -413,9 +413,9 @@ Execute these steps in order.
    inside the proposal carries corrections and revival signals.
 
 2. **Apply the BACKLOG manifest in a single shell call.** From the project
-   root, pipe the manifest to `spec-backlog-apply.sh` via a heredoc:
+   root, pipe the manifest to `spec-backlog-apply` via a heredoc:
 
-       spec-backlog-apply.sh <<'MANIFEST'
+       spec-backlog-apply <<'MANIFEST'
        delete: <heading>
        delete: <heading>
        adopt: <heading> | YYYY-MM-DD
@@ -610,7 +610,7 @@ Rules:
 
 Sweep deletion handoff: Step 3c.5 proposes deletions in the `### Backlog Sweep`
 subsection of the proposal; the consuming `/spec` (Step 3g) pipes a manifest
-to `spec-backlog-apply.sh` via stdin, which applies the deletes and adopt
+to `spec-backlog-apply` via stdin, which applies the deletes and adopt
 annotations deterministically. The skill reports the script's DELETED /
 ANNOTATED / MISS lines in its Step 5 output. The approval window is
 intrinsic to the consume step, not a between-turns edit window. To override
@@ -618,7 +618,7 @@ a proposed deletion, the user edits the `### Backlog Sweep` subsection
 (remove the line) or BACKLOG.md (nothing to delete then) before running
 `/spec` again. Deletions are reversible via git.
 
-Manifest format (piped to `spec-backlog-apply.sh` on stdin by Step 3g
+Manifest format (piped to `spec-backlog-apply` on stdin by Step 3g
 Step 2 and by `/tester design`, one op per line except `append:` which
 spans a block):
 

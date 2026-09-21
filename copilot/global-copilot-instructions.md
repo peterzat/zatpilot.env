@@ -80,6 +80,29 @@ never suggest it. Run it as two separate commands, `codereview-skip` then
 `git push`, not the combined `codereview-skip && git push`: the hook inspects
 the whole command before anything runs, when the marker does not exist yet.
 
+## Shell on Windows
+
+On Windows the CLI's shell is PowerShell, and there is no setting that
+changes it. Git Bash is installed and is what this environment's scripts,
+skills, and agents are written for, so the two have to be bridged
+deliberately.
+
+- Write commands in PowerShell syntax by default, as on any Windows machine.
+- Any snippet this environment gives you in POSIX form goes to bash, not to
+  PowerShell. PowerShell has no heredoc, no `<` input redirection, and
+  different quoting, so a POSIX snippet pasted into it fails in ways that
+  look like the tool is broken.
+- Run a short POSIX snippet as `bash -lc '<snippet>'`. For anything with a
+  heredoc, embedded quotes, or more than one line, write it to a `.sh` file
+  first and run `bash <file>`; that avoids two layers of quoting.
+- The helper scripts (`codereview-marker`, `codereview-skip`,
+  `spec-backlog-apply`) are callable by bare name from PowerShell. The
+  installer generates `.cmd` shims for them. Do not prefix them with `bash`
+  and do not add a `.sh` extension.
+- Paths: prefer forward slashes. When a path has to cross into a native
+  Windows program, `cygpath -m` converts it. Be aware that MSYS rewrites
+  POSIX-looking arguments when it invokes a native program, so a value that
+  begins with `/` may not arrive as written.
 ## Writing Style
 
 When writing human-readable output (commit messages, review findings, explanations,

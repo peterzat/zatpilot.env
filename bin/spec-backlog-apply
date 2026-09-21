@@ -8,7 +8,7 @@ set -euo pipefail
 # LLM-executed file edits.
 #
 # Invocation:
-#   spec-backlog-apply.sh <<'MANIFEST'
+#   spec-backlog-apply <<'MANIFEST'
 #   delete: <heading as it appears or appeared in BACKLOG.md>
 #   adopt: <heading> | <YYYY-MM-DD>
 #   purge-origin: <origin prefix>

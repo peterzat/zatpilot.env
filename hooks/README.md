@@ -28,6 +28,30 @@ No matcher is set. The script self-filters on `toolName`, so a wrong or
 renamed matcher key can never cause a silent bypass; the worst case is the
 script running (and instantly exiting) for non-shell tools.
 
+### Windows registration
+
+Hook commands are selected by platform and do not fall back to each other:
+a `bash` entry runs on macOS and Linux only, a `powershell` entry on Windows
+only. A Windows machine registered with the JSON above would have no gate at
+all, and nothing would say so. The installer therefore writes both fields
+there, with the powershell one re-entering bash:
+
+```json
+{
+  "type": "command",
+  "bash": "C:/path/to/zatpilot.env/hooks/pre-push-codereview.sh",
+  "powershell": "& 'C:/Program Files/Git/bin/bash.exe' 'C:/path/to/zatpilot.env/hooks/pre-push-codereview.sh'",
+  "timeoutSec": 30
+}
+```
+
+Two Windows details matter for the wire format. The shell tool is named
+`powershell`, which the `*shell*` branch of the toolName filter matches. And
+the command the model runs is PowerShell, so a POSIX command arrives wrapped
+(`bash -lc "git push"`); the tokenizer strips quotes and treats interpreter
+names as transparent prefixes so the wrapped form still gates. Verify both
+against the live CLI with docs/windows-validation.md items 2 and 3.
+
 ### Wire format
 
 The CLI sends a JSON payload on stdin: `toolName` (e.g. `bash`) and
@@ -88,6 +112,10 @@ changes. Markers live in
   the limit. Observed behavior at the limit is a Mac validation item.
 - **Sandboxing.** If a local sandbox restricts writes, the marker write from
   the codereview agent (to `~/.cache`) may need approval. Validation item.
+- **Marker directory permissions on Windows.** `chmod 700` through MSYS does
+  not change the NTFS ACL, so the marker directory reads back as 755 there.
+  The installer applies the real restriction with `icacls`, and the marker
+  suite asserts the ACL instead of the mode on that platform.
 
 ### Manual test recipe
 
@@ -103,7 +131,8 @@ stdout and exit 0. The full behavior matrix lives in
 ## Adding a new hook
 
 1. Add the script here, `chmod +x`, `#!/usr/bin/env bash`, `set -euo pipefail`.
-2. Extend the installer's hooks-JSON generation to include it.
+2. Extend the installer's hooks-JSON generation to include it, in both the
+   Windows branch (bash plus powershell) and the Unix branch.
 3. Document it in this file: event, decision contract, failure semantics.
 4. Add lint checks in `tests/lint-skills.sh` for any strings other files
    depend on, and a behavior suite if the hook makes decisions.

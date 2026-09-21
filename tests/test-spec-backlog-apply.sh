@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# Tests for bin/spec-backlog-apply.sh.
+# Tests for bin/spec-backlog-apply.
 #
 # Covers:
 #   - delete: and adopt: regression (unchanged by purge-origin addition)
@@ -17,7 +17,7 @@ set -uo pipefail
 # them single-op. Run this suite under /bin/bash on macOS to prove it.
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-SCRIPT="${REPO_DIR}/bin/spec-backlog-apply.sh"
+SCRIPT="${REPO_DIR}/bin/spec-backlog-apply"
 
 FAILS=0
 TOTAL=0

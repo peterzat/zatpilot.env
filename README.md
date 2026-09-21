@@ -43,6 +43,41 @@ cd ~/src/zatpilot.env
 ./zatpilot.env-install.sh
 ```
 
+### On Windows
+
+Everything here is bash, so Windows runs it through Git Bash. Three things
+to do before installing, and the third is the one people miss:
+
+```powershell
+winget install Git.Git           # Git Bash, the interpreter for all of this
+winget install jqlang.jq         # the hook and installer both need it
+```
+
+Turn on Developer Mode (Settings > System > For developers). Without it
+Windows refuses symbolic links to a normal user, MSYS silently turns
+`ln -s` into a file copy, and the install looks fine while never picking up
+a repo edit again. The installer detects this, prints `Links: copy`, and
+falls back to junctions and copies, but then it has to be re-run after
+every pull.
+
+Then install from either shell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\zatpilot.env-install.ps1
+```
+
+```bash
+./zatpilot.env-install.sh        # from Git Bash
+```
+
+The `.ps1` is a launcher with no install logic; it finds Git Bash and runs
+the one installer. On Windows the installer additionally registers the gate
+hook under a `powershell` key (a `bash` hook entry never fires there, which
+would leave the gate silently absent), generates a `.cmd` shim per helper
+so PowerShell can run them by bare name, and adds `~/.copilot/bin` and Git's
+`bin` directory to the user PATH. Walk
+[docs/windows-validation.md](docs/windows-validation.md) on a first install.
+
 The installer is idempotent. It prompts for git identity only when unset, and:
 
 | Target | Source |
@@ -57,8 +92,9 @@ The installer is idempotent. It prompts for git identity only when unset, and:
 It never modifies the CLI's own state or settings files. Open a new shell
 (for PATH), start `copilot`, and check that `/skills list` shows the six
 skills and `/agent` lists the five agents. On a first install, walk
-[docs/mac-validation.md](docs/mac-validation.md) once to confirm the
-CLI-dependent behaviors.
+[docs/mac-validation.md](docs/mac-validation.md), or
+[docs/windows-validation.md](docs/windows-validation.md) on Windows, once to
+confirm the CLI-dependent behaviors.
 
 Then, in any project:
 
@@ -234,7 +270,7 @@ that the other roles parse.
 
 Accepted Risks sections are the human override channel: a finding moved there
 is reported as NOTE thereafter instead of re-blocking every review. BACKLOG.md
-is only ever mutated by `bin/spec-backlog-apply.sh` from a manifest, never by
+is only ever mutated by `bin/spec-backlog-apply` from a manifest, never by
 direct model edits; deterministic mutation is what keeps a register that
 survives dozens of turns from silently rotting.
 
@@ -404,8 +440,10 @@ plus checks: behavior suites for the gate, marker, backlog script, and
 installer, plus the structural lint). Behaviors that depend on the live CLI
 (skill discovery, agent isolation, hook wire format, plan handoff) are
 enumerated as an ordered checklist in
-[docs/mac-validation.md](docs/mac-validation.md); walk it once per new
-machine or after a major CLI update.
+[docs/mac-validation.md](docs/mac-validation.md), with a Windows counterpart
+in [docs/windows-validation.md](docs/windows-validation.md); walk one once
+per new machine or after a major CLI update. The suite passes in full on
+macOS, Linux, and Windows under Git Bash.
 
 ## References
 

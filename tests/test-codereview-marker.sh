@@ -324,18 +324,37 @@ else
   fail "path: bad format '${p}' (expected match against ${EXPECTED_DIR}/marker-<8hex>)"
 fi
 
-# path must create the marker directory at mode 0700 (per-user).
+# path must create the marker directory private to this user.
 if [[ -d "${EXPECTED_DIR}" ]]; then
   pass "path: marker directory exists"
 else
   fail "path: marker directory missing"
 fi
-mode=$(_mode "${EXPECTED_DIR}")
-if [[ "${mode}" == "700" ]]; then
-  pass "path: marker directory mode 0700"
-else
-  fail "path: marker directory mode ${mode:-?} (expected 700)"
-fi
+
+# The mode assertion is POSIX-only. Windows ignores the bits chmod sets
+# through MSYS (the directory always reads back 755) and enforces access
+# through the NTFS ACL that the installer applies instead, so assert what
+# the platform can actually enforce.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    acl=$(icacls "$(cygpath -w "${EXPECTED_DIR}")" 2>/dev/null || true)
+    if [[ -z "${acl}" ]]; then
+      pass "path: marker directory ACL not queryable; POSIX mode check skipped on Windows"
+    elif printf '%s' "${acl}" | grep -qE 'Everyone|BUILTIN\\Users'; then
+      fail "path: marker directory ACL grants Everyone or Users; run the installer to tighten it"
+    else
+      pass "path: marker directory is not readable by Everyone or Users (Windows ACL)"
+    fi
+    ;;
+  *)
+    mode=$(_mode "${EXPECTED_DIR}")
+    if [[ "${mode}" == "700" ]]; then
+      pass "path: marker directory mode 0700"
+    else
+      fail "path: marker directory mode ${mode:-?} (expected 700)"
+    fi
+    ;;
+esac
 
 # --- skip-path subcommand ---
 

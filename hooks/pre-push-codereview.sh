@@ -6,10 +6,14 @@ set -euo pipefail
 # ~/.copilot/hooks/zatpilot-env.json, written by zatpilot.env-install.sh.
 #
 # Wire format (Copilot CLI hooks):
-#   stdin:  JSON with .toolName (e.g. "bash") and .toolArgs. toolArgs is
-#           documented as a JSON-encoded STRING containing the tool input
-#           (so it must be parsed twice); an object form is tolerated
-#           defensively.
+#   stdin:  JSON with .toolName and .toolArgs. The shell tool is named
+#           "bash" on macOS and Linux and "powershell" on Windows; the
+#           toolName filter matches both. toolArgs is documented as a
+#           JSON-encoded STRING containing the tool input (so it must be
+#           parsed twice); an object form is tolerated defensively. The
+#           command is read from .command, then .script, then any string
+#           value in the payload, so a renamed key over-gates (a needless
+#           review) instead of silently opening the gate.
 #   stdout: JSON decision {"permissionDecision":"allow"|"deny",
 #           "permissionDecisionReason":"..."} with exit 0. The reason on a
 #           deny is shown to the model; it carries the instruction to run
@@ -74,8 +78,13 @@ set -euo pipefail
 # identically. Each operator CHARACTER is padded, so "&&" becomes "& &" and
 # "||" becomes "| |"; that is harmless because the command-position checks
 # accept the single-character operators too. A newline is a statement
-# separator, so it is normalized to ";". The result is used only for
-# detection; the hook never re-executes the command.
+# separator, so it is normalized to ";". Quote characters are stripped so a
+# command wrapped for another shell (bash -lc "git push", pwsh -Command
+# "git push", cmd /c "git push") still tokenizes into bare git and push
+# tokens; without that a wrapped push silently bypasses the gate, which
+# matters most on Windows where the CLI shell is PowerShell and wrapping is
+# routine. The result is used only for detection; the hook never re-executes
+# the command.
 _normalize_ops() {
   local norm="$1"
   local nl=$'\n'
@@ -85,6 +94,8 @@ _normalize_ops() {
   norm="${norm//(/ ( }"
   norm="${norm//)/ ) }"
   norm="${norm//$nl/ ; }"
+  norm="${norm//\"/ }"
+  norm="${norm//\'/ }"
   printf '%s' "${norm}"
 }
 
@@ -98,9 +109,11 @@ _normalize_ops() {
 # after a shell operator, or preceded only by transparent prefix tokens
 # (VAR=value assignments, the prefix words env/command/exec/nohup/time/sudo/
 # builtin/xargs, arg-taking process wrappers such as nice/ionice/setsid/
-# stdbuf/caffeinate and the coreutils duration wrapper, pure numeric or
-# duration tokens like "60" or "5s" that are wrapper arguments, and option
-# tokens starting with "-"). So "echo git push" and "echo 5 git push" are
+# stdbuf/caffeinate and the coreutils duration wrapper, shell binaries that
+# wrap a command string (bash/sh/pwsh/powershell/cmd, bare or with a path or
+# .exe suffix), pure numeric or duration tokens like "60" or "5s" that are
+# wrapper arguments, and option tokens starting with "-" or an absolute
+# path). So "echo git push" and "echo 5 git push" are
 # not misread as pushes, while "env git push", "command git push",
 # "GIT_TRACE=1 git push", and "nice -n 10 git push" still gate. Bias stays
 # toward over-detection.
@@ -125,6 +138,9 @@ _push_subcommand_indices() {
       case "${t[p]}" in
         "&&"|"||"|";"|"|"|"&"|"("|"{"|"!") break ;;
         env|command|exec|nohup|time|sudo|builtin|xargs|nice|ionice|setsid|stdbuf|caffeinate|timeout) p=$((p - 1)) ;;
+        bash|sh|zsh|ksh|dash|pwsh|powershell|cmd) p=$((p - 1)) ;;
+        *bash.exe|*sh.exe|*pwsh.exe|*powershell.exe|*cmd.exe|*/bash|*/sh|*/pwsh) p=$((p - 1)) ;;
+        /*) p=$((p - 1)) ;;
         -*) p=$((p - 1)) ;;
         *)
           if [[ "${t[p]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then p=$((p - 1))
@@ -264,7 +280,10 @@ esac
 if ! INVOKED_CMD=$(printf '%s' "${HOOK_INPUT}" | jq -r '
       .toolArgs
       | if type == "string" then fromjson else . end
-      | .command // ""' 2>/dev/null); then
+      | if type == "string" then .
+        elif type == "object" then (.command // .script // ([.. | strings] | join(" ")))
+        else ([.. | strings] | join(" "))
+        end' 2>/dev/null); then
   echo "Pre-push gate: cannot parse toolArgs for a shell tool call." >&2
   echo "Refusing the call; the gate cannot see the command it guards." >&2
   exit 2

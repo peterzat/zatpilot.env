@@ -504,7 +504,7 @@ TESTING.md BACKLOG.md` for files that this run created.
    If TESTING.md did not exist at all, create it containing only the
    `# Durable test-architecture contract` H1 and the contract body.
 
-2. **Apply the BACKLOG manifest via `spec-backlog-apply.sh`.** All
+2. **Apply the BACKLOG manifest via `spec-backlog-apply`.** All
    BACKLOG.md mutations, including the append of new rollout entries,
    flow through the script. The script is on PATH (installed by the
    framework installer); do not prefix it with `bin/`, which only
@@ -514,7 +514,7 @@ TESTING.md BACKLOG.md` for files that this run created.
    followed by one `append:` / `end-append` block per rollout entry
    drafted in Step D.5:
 
-       spec-backlog-apply.sh <<'MANIFEST'
+       spec-backlog-apply <<'MANIFEST'
        purge-origin: tester design
        append: <short name>
        - **One-line description** of the proposal.
@@ -548,7 +548,7 @@ TESTING.md BACKLOG.md` for files that this run created.
 3. Do not write BACKLOG.md outside the script. No edit, write, `sed
    -i`, shell redirect, or `cat >>` on BACKLOG.md. Every mutation
    (delete, append, annotate, purge) goes through
-   `spec-backlog-apply.sh`. This is the invariant that lets LLM
+   `spec-backlog-apply`. This is the invariant that lets LLM
    non-compliance on state-mutation edits never silently rot
    BACKLOG.md.
 

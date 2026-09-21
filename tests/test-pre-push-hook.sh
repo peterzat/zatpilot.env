@@ -30,8 +30,14 @@ fail() { TOTAL=$((TOTAL + 1)); FAILS=$((FAILS + 1)); printf '  FAIL %s\n' "$1"; 
 
 # Build the Copilot-shaped payload for a shell command. toolArgs is a
 # JSON-encoded STRING per the documented wire format.
+#
+# The command goes in over stdin rather than through --arg. On Windows,
+# MSYS rewrites any argv value that looks like a POSIX path before a native
+# program sees it, so `--arg c '/usr/bin/bash -lc "git push"'` reaches jq as
+# 'C:/Program Files/Git/usr/bin/bash ...' and the suite would quietly test a
+# different command than the one it names. Stdin is never rewritten.
 payload_for() {
-  jq -n --arg c "$1" '{toolName: "bash", toolArgs: ({command: $c} | tostring)}'
+  printf '%s' "$1" | jq -Rs '{toolName: "bash", toolArgs: ({command: .} | tostring)}'
 }
 
 # Run the hook in a directory with a given payload. Sets HOOK_EC, HOOK_OUT
@@ -77,6 +83,10 @@ setup_test_repo() {
   git -C "${TEST_REPO}" init -q -b main
   git -C "${TEST_REPO}" config user.email test@test.invalid
   git -C "${TEST_REPO}" config user.name "test"
+  # Windows: a global core.autocrlf would rewrite the fixtures on checkout,
+  # perturbing the diff the marker hashes and adding a warning to every
+  # git call. Pin the fixture repos to LF.
+  git -C "${TEST_REPO}" config core.autocrlf false
   echo "first" > "${TEST_REPO}/file.txt"
   git -C "${TEST_REPO}" add file.txt
   git -C "${TEST_REPO}" commit -q -m "initial"
@@ -438,6 +448,101 @@ echo "modified" > "${TEST_REPO}/file.txt"
 expect "${TEST_REPO}" '(git push)' deny 0 "(git push) subshell detected and denied"
 teardown_test_repo
 
+
+# ============================================================
+echo ""
+echo "==> Regression: a push wrapped for another shell must not bypass the gate"
+# ============================================================
+#
+# On Windows the CLI's shell tool is PowerShell, so a bash command reaches
+# the hook wrapped in an interpreter call and the push tokens arrive inside
+# quotes. Before quote stripping, every form below tokenized as '"git' and
+# 'push"' and the walker never saw a bare git token: a silent bypass of the
+# only hard gate in the system. Quotes are now stripped during
+# normalization and the interpreters are transparent prefixes.
+
+setup_test_repo
+echo "modified" > "${TEST_REPO}/file.txt"
+
+expect "${TEST_REPO}" 'bash -lc "git push"'          deny 0 "bash -lc \"git push\": detected and denied"
+expect "${TEST_REPO}" "bash -c 'git push'"           deny 0 "bash -c 'git push': detected and denied"
+expect "${TEST_REPO}" 'pwsh -Command "git push"'     deny 0 "pwsh -Command \"git push\": detected and denied"
+expect "${TEST_REPO}" 'powershell -Command "git push"' deny 0 "powershell -Command: detected and denied"
+expect "${TEST_REPO}" 'cmd /c "git push"'            deny 0 "cmd /c \"git push\": detected and denied"
+expect "${TEST_REPO}" '/usr/bin/bash -lc "git push"' deny 0 "bash by absolute path: detected and denied"
+expect "${TEST_REPO}" 'sh -c "cd /tmp && git push"'  deny 0 "sh -c compound: detected and denied"
+expect "${TEST_REPO}" 'git push "origin" main'       deny 0 "quoted remote: detected and denied"
+
+teardown_test_repo
+
+# ============================================================
+echo ""
+echo "==> Over-detection guard: stripping quotes must not invent pushes"
+# ============================================================
+#
+# Quote stripping widens what the tokenizer sees, so the false-positive
+# guards matter more than before. A push named inside a string argument is
+# still not a push in command position.
+
+setup_test_repo
+echo "modified" > "${TEST_REPO}/file.txt"
+
+expect "${TEST_REPO}" 'echo "git push"'                       abstain 0 "echo \"git push\": still abstains"
+expect "${TEST_REPO}" 'git commit -m "notes on git push"'     abstain 0 "commit message naming git push: still abstains"
+expect "${TEST_REPO}" 'grep -r "git push" .'                  abstain 0 "grep for the phrase: still abstains"
+expect "${TEST_REPO}" 'echo "run bash -lc \"git push\" later"' abstain 0 "echoed wrapper text: still abstains"
+
+teardown_test_repo
+
+# ============================================================
+echo ""
+echo "==> Wire format: the Windows shell tool and alternate command keys"
+# ============================================================
+#
+# The Windows runtime tool is named powershell, which the toolName filter
+# has to match, and the command may not arrive under .command. An
+# unrecognized key must over-gate rather than silently abstain: abstaining
+# would leave the gate blind on a payload shape the CLI is free to change.
+
+setup_test_repo
+echo "modified" > "${TEST_REPO}/file.txt"
+
+for tool in "powershell" "PowerShell"; do
+  p=$(jq -n --arg t "${tool}" '{toolName: $t, toolArgs: ({command: "git push"} | tostring)}')
+  run_hook_raw "${TEST_REPO}" "${p}"
+  if [[ "${HOOK_EC}" -eq 0 && "$(decision_of)" == "deny" ]]; then
+    pass "toolName '${tool}': gated"
+  else
+    fail "toolName '${tool}': expected deny, got $(decision_of)/exit ${HOOK_EC}"
+  fi
+done
+
+p=$(jq -n '{toolName: "powershell", toolArgs: {script: "git push"}}')
+run_hook_raw "${TEST_REPO}" "${p}"
+if [[ "${HOOK_EC}" -eq 0 && "$(decision_of)" == "deny" ]]; then
+  pass "toolArgs.script instead of .command: gated"
+else
+  fail "toolArgs.script: expected deny, got $(decision_of)/exit ${HOOK_EC}"
+fi
+
+p=$(jq -n '{toolName: "powershell", toolArgs: {commandLine: "git push", cwd: "/tmp"}}')
+run_hook_raw "${TEST_REPO}" "${p}"
+if [[ "${HOOK_EC}" -eq 0 && "$(decision_of)" == "deny" ]]; then
+  pass "unknown command key falls back to string scan: gated"
+else
+  fail "unknown command key: expected deny, got $(decision_of)/exit ${HOOK_EC}"
+fi
+
+# The fallback scan must not turn every shell call into a review demand.
+p=$(jq -n '{toolName: "powershell", toolArgs: {commandLine: "git status", cwd: "/tmp"}}')
+run_hook_raw "${TEST_REPO}" "${p}"
+if [[ "${HOOK_EC}" -eq 0 && "$(decision_of)" == "abstain" ]]; then
+  pass "unknown command key, non-push command: abstains"
+else
+  fail "unknown key non-push: expected abstain, got $(decision_of)/exit ${HOOK_EC}"
+fi
+
+teardown_test_repo
 # ============================================================
 echo ""
 echo "==> Wire format: toolName filter and toolArgs variants"

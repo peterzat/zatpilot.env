@@ -14,10 +14,10 @@ scrapes those lines and counts a suite with no summary line as failed.
 | Suite | Covers |
 |-------|--------|
 | `lint-skills.sh` | Structural drift guard: frontmatter, builder/verifier tool boundaries, dispatch-mode and marker-authority contracts, META field parity, gate wording alignment, forbidden strings, BSD/macOS portability, writing style, shellcheck when installed |
-| `test-pre-push-hook.sh` | Push detection across command forms (compound, tight-packed, newline, subshell, `git -C`), tag-only scoping, the Copilot decision-JSON contract, wire-format variants, fail-closed paths, PATH-independent marker resolution |
-| `test-codereview-marker.sh` | The three base-resolution cases, empty-diff exit 2, hash stability, marker write semantics, 0700 cache dir, parity with an independent reference computation |
+| `test-pre-push-hook.sh` | Push detection across command forms (compound, tight-packed, newline, subshell, `git -C`), tag-only scoping, the Copilot decision-JSON contract, wire-format variants including the Windows `powershell` tool and alternate command keys, pushes wrapped for another shell, fail-closed paths, PATH-independent marker resolution |
+| `test-codereview-marker.sh` | The three base-resolution cases, empty-diff exit 2, hash stability, marker write semantics, a private cache dir (mode 0700 on POSIX, ACL on Windows), parity with an independent reference computation |
 | `test-spec-backlog-apply.sh` | Manifest ops (delete, adopt, purge-origin, append), ACTIVE preservation, MISS semantics, file creation, unterminated-block error. Single-op sections double as the bash 3.2 empty-array regression surface |
-| `test-install.sh` | Sandboxed-HOME installer run: symlinks, generated hooks JSON, PATH line, idempotent re-run, backup behavior |
+| `test-install.sh` | Sandboxed-HOME installer run: links (symlink, or junction and copy where Windows forbids symlinks), generated hooks JSON including the Windows `powershell` entry, `.cmd` shim generation, PATH line, idempotent re-run, backup behavior |
 
 Notes:
 

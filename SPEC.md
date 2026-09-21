@@ -1,53 +1,79 @@
-## Spec - 2026-08-04 - Copilot CLI port of the zat.env environment
+## Spec - 2026-09-21 - Windows 11 support
 
-**Goal:** Stand up zatpilot.env as a standalone, fully tested port of the
-zat.env agentic-coding environment to GitHub Copilot CLI, ready for live
-validation on a machine with the CLI installed.
+**Goal:** Make zatpilot.env install and enforce correctly on Windows 11, so a
+Windows machine gets the same turn loop and the same hard pre-push gate as
+macOS and Linux, with the platform's silent failure modes closed rather than
+documented around.
 
 ### Acceptance Criteria
 
-- [x] All seven roles exist: spec and pr as in-context skills; codereview,
-  security, tester, and architect as dispatch skills; codereview, codefix,
-  security, tester, and architect as isolated agents with tool restrictions.
-- [x] The pre-push gate implements the Copilot hook wire format: denies
-  unreviewed pushes with coaching in the decision reason, allows
-  marker-matched pushes, abstains for non-push and tag-only commands, and
-  fails closed on infrastructure errors (tests/test-pre-push-hook.sh).
-- [x] The marker, skip, and backlog scripts are macOS-portable (no GNU-only
-  tools) and bash 3.2 safe (guarded empty-array expansions), enforced by
-  lint sweeps and behavior suites.
-- [x] The installer wires ~/.copilot idempotently in a sandboxed double-run
-  test and never touches CLI-owned state files (tests/test-install.sh).
-- [x] tests/run-all.sh passes in full on Linux.
-- [x] README.md stands alone, links the design article, and documents the
-  differences from zat.env; NOTICE carries the source
-  attribution.
-- [x] Skills and agents are discovered from symlinks by the live CLI
-  (docs/mac-validation.md items 1-2).
-- [x] The gate fires end-to-end in the live CLI: deny with visible coaching,
-  allow after /codereview, skip bypass consumed (items 4, 5, 17).
-- [x] Dispatched reviews never modify files: the dispatch layer refuses to
-  route edits through the codereview agent, whose tool list excludes the
-  edit and write tools. A direct user instruction can still write via
-  shell, which the agent needs for git and the marker, so the boundary is
-  prompt-tier with tool friction (item 3, reworded to verified behavior).
-- [x] /spec plan adopts a plan from the conversation after plan-mode
-  approval, and the session-store fallback grounds the plan against the
-  repository, asking before adopting only when the match is ambiguous
-  (items 11-12, fallback contract updated during validation).
-- [x] The full test suite passes under /bin/bash 3.2 on macOS (item 13).
+- [x] The installer detects its platform and, on Windows, wires `~/.copilot`
+  with native symlinks (`MSYS=winsymlinks:nativestrict`), printing the link
+  mode it chose so a degraded install is never a surprise
+  (tests/test-install.sh).
+- [ ] The junction-and-copy fallback produces a working install on a Windows
+  account that may not create symbolic links, and says that re-running is
+  required after a pull.
+- [x] The gate hook is registered with a `powershell` entry on Windows as
+  well as a `bash` one, and the install test fails a registration that
+  carries only `bash`. A bash-only entry never fires there, which would
+  leave the gate absent with no error.
+- [x] Push detection gates a push wrapped for another shell
+  (`bash -lc "git push"`, `pwsh -Command`, `cmd /c`) and quoted arguments,
+  while `echo "git push"` and a commit message naming a push still pass
+  through (tests/test-pre-push-hook.sh).
+- [x] The hook finds the command in the payload when it does not arrive
+  under `.command`, over-gating rather than abstaining, so a change in the
+  CLI's payload shape cannot silently open the gate.
+- [x] The three helpers are invocable by bare name from PowerShell through
+  generated `.cmd` shims, and no helper carries a `.sh` extension, which
+  PATHEXT does not cover.
+- [x] `.gitattributes` pins LF and no file is stored with CRLF, so a Windows
+  checkout cannot produce a script with a carriage return in its shebang or
+  its heredoc delimiters.
+- [x] The marker directory is private on Windows through an NTFS ACL applied
+  by the installer, and the marker suite asserts the ACL there and the 0700
+  mode elsewhere.
+- [x] `tests/run-all.sh` passes in full on Windows under Git Bash.
+- [x] The global instructions tell the model how to bridge PowerShell and
+  bash, including that POSIX snippets go to `bash -lc` or a `.sh` file.
+- [x] README documents the Windows prerequisites, including that Developer
+  Mode is what makes the install live, and `docs/windows-validation.md`
+  enumerates the checks that need a running CLI.
+- [ ] `docs/windows-validation.md` walked end to end on a Windows machine,
+  with the CLI version recorded in the commit message.
 
 ### Context
 
-Built on a Linux machine without the Copilot CLI installed; live validation
-completed 2026-08-04 on macOS with Copilot CLI 1.0.78 by walking
-docs/mac-validation.md. Criteria 9 and 10 were reworded during validation to
-match verified behavior: the reviewer boundary is prompt-tier with tool
-friction (shell is a write primitive its toolset requires), and fallback
-plan adoption is verification-based rather than unconditionally confirmed. The spec skill's framework read points at
-~/src/zatpilot.env/README.md by convention. Format contracts for the review
-artifacts are identical to the source environment, with REVIEW_META gaining
-diff_hash and tests_pass/tests_fail fields for the sibling-dispatch review
-cycle.
+Ported on Windows 11 Pro for Workstations (ARM64) with Copilot CLI 1.0.86,
+Git for Windows 2.x, jq 1.8.2, and PowerShell 7.6.6. Items 1, 3, 6, and the
+skill and instruction discovery paths were confirmed against the live CLI
+during the port; the remaining validation items still need a full session.
 
-<!-- SPEC_META: {"date":"2026-08-04","title":"Copilot CLI port of the zat.env environment","criteria_total":11,"criteria_met":11} -->
+Four Windows behaviors drove the work, and all four fail silently rather
+than loudly, which is why each got a lint pin as well as a test:
+
+- Copilot CLI's shell tool on Windows is PowerShell, named `powershell` in
+  hook payloads, with no supported way to select Git Bash. Anything the
+  model runs is PowerShell, so POSIX snippets have to be handed to bash
+  explicitly and helpers need `.cmd` shims.
+- Hook commands are platform-exclusive. The `bash` field never runs on
+  Windows.
+- Without Developer Mode, MSYS turns `ln -s` into a file copy and prints
+  nothing, so the install looks correct and stops tracking the repo.
+- MSYS rewrites POSIX-looking argv on the way into a native Windows program.
+  This was the subtle one: it made the installer's `include.path` guard
+  compare a path git never stored (a duplicate include on every re-run), and
+  it silently rewrote the commands the hook test harness thought it was
+  testing. Values that matter now go over stdin or through an explicit
+  `cygpath -m`.
+
+`bin/spec-backlog-apply.sh` was renamed to `bin/spec-backlog-apply` because
+PowerShell hands a `.sh` name to the Windows file association instead of
+running it.
+
+---
+*Prior spec (2026-08-04): Copilot CLI port of the zat.env environment, 11 of
+11 criteria met and validated live on macOS with CLI 1.0.78.*
+
+<!-- SPEC_META: {"date":"2026-09-21","title":"Windows 11 support","criteria_total":12,"criteria_met":10} -->

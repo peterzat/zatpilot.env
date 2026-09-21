@@ -1,0 +1,12 @@
+# Line endings are pinned to LF for every text file in this repo.
+#
+# Git for Windows defaults to core.autocrlf=true, which rewrites the working
+# tree to CRLF on checkout. That breaks this repo in ways that are quiet and
+# slow to diagnose: a shebang line ending in CR makes a script unrunnable,
+# heredoc delimiters stop matching, and `read` picks up a trailing CR in
+# every variable. The scripts here are executed by bash on all three
+# platforms, so LF is the only correct checkout form.
+#
+# The generated .cmd shims are the one place CRLF is wanted, and the
+# installer writes those outside the repo.
+* text=auto eol=lf

@@ -355,7 +355,7 @@ TESTER_SKILL="${SKILLS_DIR}/tester/SKILL.md"
 ARCH_SKILL="${SKILLS_DIR}/architect/SKILL.md"
 TESTER_AGENT="${AGENTS_DIR}/tester.agent.md"
 ARCH_AGENT="${AGENTS_DIR}/architect.agent.md"
-BACKLOG_SCRIPT="bin/spec-backlog-apply.sh"
+BACKLOG_SCRIPT="bin/spec-backlog-apply"
 
 # Spec mode router and guards.
 has "${SPEC_SKILL}" 'Wins over every other branch' "spec: plan keyword wins routing"
@@ -366,7 +366,7 @@ has "${SPEC_SKILL}" 'too under-specified to produce testable acceptance criteria
 has "${SPEC_SKILL}" 'Acceptance criteria are tests' "spec: criteria-are-tests principle"
 has "${SPEC_SKILL}" 'Bias toward keep when unsure' "spec: sweep bias to keep"
 has "${SPEC_SKILL}" 'the script owns all mutations' "spec: script-only BACKLOG mutation"
-has "${SPEC_SKILL}" 'spec-backlog-apply.sh' "spec: names the mutation script"
+has "${SPEC_SKILL}" 'spec-backlog-apply' "spec: names the mutation script"
 has "${SPEC_SKILL}" 'STOP and wait' "spec: stops after writing, no implementation"
 
 # Plan adoption is context-first with a confirmed fallback.
@@ -448,6 +448,78 @@ if [[ -f "${INSTALLER}" ]]; then
   has "${INSTALLER}" 'zshrc' "installer: Darwin PATH goes to zshrc"
   has "${INSTALLER}" 'never touches' "installer: documents the no-CLI-state rule"
   has "${INSTALLER}" 'brew install jq' "installer: Darwin jq hint"
+fi
+
+# ============================================================
+echo ""
+echo "==> 11b. Windows port contracts"
+# ============================================================
+#
+# Windows differs from the Unix platforms in four ways that are silent when
+# they break: a bash-only hook entry never fires, PowerShell cannot run an
+# extensionless script, MSYS turns ln -s into a copy, and a CRLF checkout
+# makes every script unrunnable. Each of those has exactly one place in the
+# repo that handles it, pinned here.
+
+if [[ -f "${INSTALLER}" ]]; then
+  has "${INSTALLER}" 'winget install jqlang.jq' "installer: Windows jq hint"
+  has "${INSTALLER}" 'winsymlinks:nativestrict' "installer: asks MSYS for native symlinks"
+  has "${INSTALLER}" 'LINK_MODE' "installer: probes symlink capability and reports the mode"
+  has "${INSTALLER}" 'powershell: \$pscmd' "installer: Windows hook entry carries a powershell command"
+  has "${INSTALLER}" '\.cmd' "installer: generates .cmd shims for PowerShell"
+  has "${INSTALLER}" 'ZATPILOT_SKIP_WINDOWS_PATH' "installer: sandboxed runs can skip the user PATH write"
+  has "${INSTALLER}" 'icacls' "installer: tightens the marker cache ACL on Windows"
+  hasnt "${INSTALLER}" 'add_windows_path_entry .*usr/bin' "installer: never puts Git usr/bin on the Windows PATH"
+fi
+
+# The hook must recognize the Windows shell tool and survive a wrapped
+# command. Both are one-line contracts with no visible failure mode.
+has "${HOOK}" 'powershell' "hook: documents the Windows shell tool name"
+has "${HOOK}" 'norm//\\"' "hook: strips quotes before tokenizing"
+has "${HOOK}" '\.script' "hook: falls back past .command when the key differs"
+
+# LF is not a preference here: a CR in a shebang or a heredoc delimiter
+# breaks the script on every platform, and Git for Windows checks out CRLF
+# by default.
+if [[ -f .gitattributes ]]; then
+  has .gitattributes 'eol=lf' "gitattributes: pins LF for the checkout"
+  pass "gitattributes: present"
+else
+  fail "gitattributes: missing (Windows checkouts would be CRLF)"
+fi
+
+# A bash script committed with CRLF defeats the .gitattributes intent.
+CRLF_OFFENDERS=$(git ls-files --eol 2>/dev/null | grep -c 'i/crlf' || true)
+if [[ "${CRLF_OFFENDERS}" -eq 0 ]]; then
+  pass "no file is stored with CRLF in the index"
+else
+  fail "${CRLF_OFFENDERS} files are stored with CRLF in the index"
+fi
+
+# PowerShell resolves a bare name through PATHEXT, which never covers .sh;
+# a helper named foo.sh is handed to the Windows file association instead of
+# being executed. Helpers stay extensionless.
+for helper in bin/*; do
+  case "${helper}" in
+    *.sh) fail "$(basename "${helper}"): helper scripts must not end in .sh (PowerShell cannot invoke them)" ;;
+    *)    pass "$(basename "${helper}"): invocable by bare name on Windows" ;;
+  esac
+done
+
+if [[ -f docs/windows-validation.md ]]; then
+  has docs/windows-validation.md 'powershell' "windows-validation: covers the PowerShell shell tool"
+  has docs/windows-validation.md 'toolName' "windows-validation: covers hook wire format"
+  has docs/windows-validation.md 'Developer Mode' "windows-validation: covers the symlink prerequisite"
+  has docs/windows-validation.md '\.cmd' "windows-validation: covers the shim path"
+else
+  fail "docs/windows-validation.md missing"
+fi
+
+if [[ -f zatpilot.env-install.ps1 ]]; then
+  has zatpilot.env-install.ps1 'zatpilot.env-install.sh' "ps1 launcher: delegates to the one installer"
+  hasnt zatpilot.env-install.ps1 'New-Item -ItemType SymbolicLink' "ps1 launcher: carries no install logic"
+else
+  fail "zatpilot.env-install.ps1 missing"
 fi
 
 # ============================================================

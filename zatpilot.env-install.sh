@@ -403,13 +403,34 @@ fi
 echo "==> Done"
 echo
 echo "Verify:"
-echo "  git st                                           # alias from gitconfig"
-echo "  ls -la ${INSTRUCTIONS_TARGET}                    # link into the repo"
-echo "  ls -la ${COPILOT_DIR}/skills/                    # six skill links"
-echo "  ls -la ${COPILOT_DIR}/agents/                    # five agent links"
-echo "  ls -la ${BIN_DIR}/                               # three helper links"
-echo "  jq . ${HOOKS_JSON}                               # gate hook registration"
-echo "  bash ${REPO_DIR}/tests/run-all.sh                # full test suite"
+# The comment column is computed, not hard-coded. These lines interpolate
+# absolute paths whose length varies by user, repo location, and platform,
+# so a fixed column lines up only on the machine it was written on.
+VERIFY_CMDS=(
+  "git st"
+  "ls -la ${INSTRUCTIONS_TARGET}"
+  "ls -la ${COPILOT_DIR}/skills/"
+  "ls -la ${COPILOT_DIR}/agents/"
+  "ls -la ${BIN_DIR}/"
+  "jq . ${HOOKS_JSON}"
+  "bash ${REPO_DIR}/tests/run-all.sh"
+)
+VERIFY_NOTES=(
+  "alias from gitconfig"
+  "link into the repo"
+  "six skill links"
+  "five agent links"
+  "three helper links"
+  "gate hook registration"
+  "full test suite"
+)
+VERIFY_WIDTH=0
+for cmd in "${VERIFY_CMDS[@]}"; do
+  (( ${#cmd} > VERIFY_WIDTH )) && VERIFY_WIDTH=${#cmd}
+done
+for i in "${!VERIFY_CMDS[@]}"; do
+  printf '  %-*s  # %s\n' "${VERIFY_WIDTH}" "${VERIFY_CMDS[i]}" "${VERIFY_NOTES[i]}"
+done
 echo
 echo "In the CLI: /skills list should show the six skills, and /agent should"
 echo "list the five agents. First run on a new machine, walk the validation"

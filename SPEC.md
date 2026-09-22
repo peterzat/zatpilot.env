@@ -40,15 +40,22 @@ documented around.
 - [x] README documents the Windows prerequisites, including that Developer
   Mode is what makes the install live, and `docs/windows-validation.md`
   enumerates the checks that need a running CLI.
-- [ ] `docs/windows-validation.md` walked end to end on a Windows machine,
-  with the CLI version recorded in the commit message.
+- [x] A full turn runs through the live CLI on Windows: `/spec` writes the
+  contract, `/codereview` dispatches the isolated reviewer and security
+  agents, the helpers run from PowerShell by bare name, and the marker is
+  written (docs/windows-validation.md, Confirmed on 2026-09-21).
+- [ ] The gate denies a real `git push` from the CLI and the two-command
+  skip bypass works, confirmed in a session rather than by invoking the
+  hook script by hand (docs/windows-validation.md items 9, 10, 11, 15).
 
 ### Context
 
-Ported on Windows 11 Pro for Workstations (ARM64) with Copilot CLI 1.0.86,
-Git for Windows 2.x, jq 1.8.2, and PowerShell 7.6.6. Items 1, 3, 6, and the
-skill and instruction discovery paths were confirmed against the live CLI
-during the port; the remaining validation items still need a full session.
+Ported on Windows 11 Pro for Workstations (ARM64) under Parallels, with
+Copilot CLI 1.0.86, Git for Windows 2.x, jq 1.8.2, and PowerShell 7.6.6. A
+full turn was then driven through the live CLI on a separate repository,
+which confirmed skill dispatch, agent isolation, instruction loading, and
+the PowerShell shim path end to end. Only the denied-push path remains
+unconfirmed from inside a session.
 
 Four Windows behaviors drove the work, and all four fail silently rather
 than loudly, which is why each got a lint pin as well as a test:
@@ -76,4 +83,4 @@ running it.
 *Prior spec (2026-08-04): Copilot CLI port of the zat.env environment, 11 of
 11 criteria met and validated live on macOS with CLI 1.0.78.*
 
-<!-- SPEC_META: {"date":"2026-09-21","title":"Windows 11 support","criteria_total":12,"criteria_met":10} -->
+<!-- SPEC_META: {"date":"2026-09-21","title":"Windows 11 support","criteria_total":13,"criteria_met":11} -->

@@ -185,6 +185,63 @@ echo change > file.txt && git add file.txt && git commit -m change
     suite reports all checks passed. The suite is slower here than on the
     Unix platforms because each fixture repo is a real `git init`.
 
+## Terminal notes
+
+Not zatpilot behavior, but the first hour on a Windows machine goes to these.
+
+- **Scrolling and selection are a tradeoff.** `/config mouse false` gives back
+  native terminal selection, at the cost of wheel scrolling and a draggable
+  scrollbar thumb: the CLI then ignores all mouse input, and the scrollbar it
+  draws becomes decorative. With `mouse true`, select with Shift held during
+  the drag, or use `/copy` for the last response.
+- **Paging works either way** with PageUp and PageDown. On a Mac keyboard,
+  including Windows in a VM on Apple hardware, those are Fn plus the up and
+  down arrows.
+- **Alt screen has no scrollback**, so no select-all reaches earlier output.
+  `/exit print` prints the session into normal scrollback on the way out.
+- **Cmd may arrive as Ctrl** under Parallels, depending on the keyboard
+  profile, which shifts Windows Terminal shortcuts such as mark mode.
+
+## Confirmed on 2026-09-21
+
+First full turn driven through the CLI on Windows 11 Pro for Workstations
+(ARM64) under Parallels, Copilot CLI 1.0.86, model gpt-5.6-terra. What that
+run exercised, in one pass over a separate repository:
+
+- Skill discovery and dispatch: `/spec` and `/codereview` both ran, and
+  `/codereview` visibly dispatched the isolated codereview and security
+  agents rather than reviewing in the calling context (items 6, 7).
+- Personal instructions loaded from the symlink in a repository that has no
+  instructions of its own (item 8).
+- The helpers ran from PowerShell by bare name through the shims: the review
+  cycle called `codereview-marker hash` and `codereview-marker write`
+  directly, and the marker was written (items 4, 5).
+- The full review cycle completed: preliminary review, focused security scan
+  at the reported scope, verification, marker, and a written CODEREVIEW.md
+  and SECURITY.md (item 14, minus the fix cycle, which had nothing to fix).
+- The agents wrote their artifacts with PowerShell here-strings rather than
+  POSIX heredocs, which is the adaptation the global instructions ask for
+  (item 13).
+
+Still unconfirmed: the gate denying a real `git push` and the two-command
+skip bypass (items 9, 10, 11, 15). That turn reached `/codereview` directly
+instead of through a denied push, so the deny path has only been exercised
+by hand against the registered hook command, not by the CLI.
+
+Two things worth knowing before the next walk:
+
+- **Autopilot installed software.** Asked to make the game run, the session
+  installed Python 3.12 x64 through winget on its own. That is autopilot
+  behaving as configured ("all permissions"), not a defect, but it is the
+  clearest illustration of what flipping that mode authorizes.
+- **A review reports on the diff, and an untracked file is not in the diff.**
+  The turn's new module was untracked, so `git diff <base>` never showed it;
+  the review reported a clean full review without reading it, and the marker
+  hash does not cover it either. Nothing unsafe reaches the remote, because
+  committing the file changes the hash and re-arms the gate, but the review
+  summary overstates its own scope until the file is tracked. Commit new
+  files before running `/codereview`.
+
 When all items pass, record the CLI version tested (`copilot --version`) and
 the Windows build in the commit message that checks off the Windows criteria
 in SPEC.md.
